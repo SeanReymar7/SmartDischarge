@@ -1,5 +1,5 @@
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;600;700&display=swap');
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -7,7 +7,13 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-sans);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-neutral: var(--neutral);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -46,72 +52,83 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.208 0.042 265.755);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.208 0.042 265.755);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.208 0.042 265.755);
-  --primary: oklch(0.511 0.096 186.391);
-  --primary-foreground: oklch(0.984 0.014 180.72);
-  --secondary: oklch(0.953 0.051 180.801);
-  --secondary-foreground: oklch(0.437 0.078 188.216);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.953 0.051 180.801);
-  --accent-foreground: oklch(0.437 0.078 188.216);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.03 190);
-  --input: oklch(0.91 0.03 190);
-  --ring: oklch(0.6 0.118 184.704);
-  --chart-1: oklch(0.6 0.118 184.704);
-  --chart-2: oklch(0.588 0.158 241.966);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.014 180.72);
-  --sidebar-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-primary: oklch(0.511 0.096 186.391);
-  --sidebar-primary-foreground: oklch(0.984 0.014 180.72);
-  --sidebar-accent: oklch(0.953 0.051 180.801);
-  --sidebar-accent-foreground: oklch(0.437 0.078 188.216);
-  --sidebar-border: oklch(0.91 0.03 190);
-  --sidebar-ring: oklch(0.6 0.118 184.704);
+  --radius: 0.5rem;
+  --background: #f3f6f5;
+  --foreground: #13201d;
+  --card: #ffffff;
+  --card-foreground: #13201d;
+  --popover: #ffffff;
+  --popover-foreground: #13201d;
+  --primary: #1f6b57;
+  --primary-foreground: #ffffff;
+  --secondary: #e3eeea;
+  --secondary-foreground: #1f4a3f;
+  --muted: #e9eeec;
+  --muted-foreground: #5b6b66;
+  --accent: #e3eeea;
+  --accent-foreground: #1f4a3f;
+  --destructive: #b42318;
+  --border: #d9e2df;
+  --input: #c9d5d1;
+  --ring: #1f6b57;
+  /* status: pending / in progress / cleared / closed / rejected */
+  --warning: #a15c00;
+  --info: #2463a6;
+  --success: #237a4b;
+  --neutral: #66736f;
+  --danger: #b42318;
+  --chart-1: #1f6b57;
+  --chart-2: #2463a6;
+  --chart-3: #a15c00;
+  --chart-4: #6b5ca5;
+  --chart-5: #b42318;
+  --sidebar: #0f2622;
+  --sidebar-foreground: #dce8e4;
+  --sidebar-primary: #6fd1b0;
+  --sidebar-primary-foreground: #0f2622;
+  --sidebar-accent: #1c3a34;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --sidebar-ring: #6fd1b0;
 }
 
 .dark {
-  --background: oklch(0.18 0.03 230);
-  --foreground: oklch(0.97 0.01 180);
-  --card: oklch(0.24 0.035 230);
-  --card-foreground: oklch(0.97 0.01 180);
-  --popover: oklch(0.24 0.035 230);
-  --popover-foreground: oklch(0.97 0.01 180);
-  --primary: oklch(0.704 0.14 182.503);
-  --primary-foreground: oklch(0.16 0.03 220);
-  --secondary: oklch(0.28 0.03 220);
-  --secondary-foreground: oklch(0.97 0.01 180);
-  --muted: oklch(0.28 0.03 220);
-  --muted-foreground: oklch(0.71 0.02 220);
-  --accent: oklch(0.32 0.05 200);
-  --accent-foreground: oklch(0.97 0.01 180);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.6 0.13 184);
-  --chart-1: oklch(0.704 0.14 182.503);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.24 0.035 230);
-  --sidebar-foreground: oklch(0.97 0.01 180);
-  --sidebar-primary: oklch(0.704 0.14 182.503);
-  --sidebar-primary-foreground: oklch(0.16 0.03 220);
-  --sidebar-accent: oklch(0.32 0.05 200);
-  --sidebar-accent-foreground: oklch(0.97 0.01 180);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.6 0.13 184);
+  --background: #0c1513;
+  --foreground: #e4ece9;
+  --card: #13201d;
+  --card-foreground: #e4ece9;
+  --popover: #13201d;
+  --popover-foreground: #e4ece9;
+  --primary: #5cc2a0;
+  --primary-foreground: #06201a;
+  --secondary: #1b2d29;
+  --secondary-foreground: #cfe3dc;
+  --muted: #1b2d29;
+  --muted-foreground: #93a6a0;
+  --accent: #1f3530;
+  --accent-foreground: #e4ece9;
+  --destructive: #f0705f;
+  --border: rgb(255 255 255 / 0.09);
+  --input: rgb(255 255 255 / 0.14);
+  --ring: #5cc2a0;
+  --warning: #e0a43a;
+  --info: #6fa8e8;
+  --success: #5cc98a;
+  --neutral: #93a6a0;
+  --danger: #f0705f;
+  --chart-1: #5cc2a0;
+  --chart-2: #6fa8e8;
+  --chart-3: #e0a43a;
+  --chart-4: #a898e0;
+  --chart-5: #f0705f;
+  --sidebar: #08100e;
+  --sidebar-foreground: #cfe0da;
+  --sidebar-primary: #5cc2a0;
+  --sidebar-primary-foreground: #06201a;
+  --sidebar-accent: #172a25;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 0.06);
+  --sidebar-ring: #5cc2a0;
 }
 
 @layer base {
@@ -119,6 +136,33 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
+
+/* Section switch inside a dashboard, and route changes (nuxt.config pageTransition) */
+.section-enter-active,
+.section-leave-active,
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.section-enter-from,
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.section-leave-to,
+.page-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

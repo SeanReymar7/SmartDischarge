@@ -3,6 +3,9 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineNuxtConfig({
   modules: ["@nuxt/content", "@nuxtjs/supabase"],
   css: ["~/assets/css/tailwind.css"],
+  app: {
+    pageTransition: { name: "page", mode: "out-in" },
+  },
   vite: {
     plugins: [tailwindcss()],
   },

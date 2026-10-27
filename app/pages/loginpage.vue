@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  Activity,
   AlertTriangle,
   ArrowLeft,
   ClipboardList,
@@ -74,15 +73,12 @@ async function handleSubmit() {
   <div class="grid min-h-screen lg:grid-cols-2">
     <!-- Form side -->
     <div class="relative flex flex-col justify-center overflow-hidden px-6 py-12 sm:px-12 lg:px-20">
-      <div
-        class="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,var(--color-primary),transparent_45%)]/[0.06]"
-      />
       <a
         href="/"
         class="absolute left-6 top-6 flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground sm:left-12 lg:left-20"
       >
         <ArrowLeft class="h-4 w-4" />
-        Back to Landing Page
+        Back to home
       </a>
 
       <button
@@ -95,21 +91,21 @@ async function handleSubmit() {
       </button>
 
       <div class="mx-auto w-full max-w-sm">
-        <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight">
-          <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/25">
-            <Activity class="h-5 w-5" />
+        <a href="/" class="mb-10 flex items-center gap-2.5 font-bold tracking-tight lg:hidden">
+          <span class="flex h-10 w-10 items-center justify-center rounded-md bg-sidebar text-sidebar-primary">
+            <AppLogo class="h-5 w-5" />
           </span>
           <span class="text-lg">AHDMS</span>
         </a>
 
-        <h1 class="mt-10 text-2xl font-semibold tracking-tight">
+        <h1 class="text-3xl font-bold tracking-tight">
           Welcome back
         </h1>
         <p class="mt-2 text-sm text-muted-foreground">
           Sign in to access the discharge management dashboard for Butuan Medical Center.
         </p>
 
-        <form class="mt-8 rounded-2xl border border-border/60 bg-card/50 p-6 shadow-sm sm:p-7" @submit.prevent="handleSubmit">
+        <form class="mt-8 rounded-xl border border-border bg-card p-6 sm:p-7" @submit.prevent="handleSubmit">
           <fieldset :disabled="isSubmitting" class="space-y-5">
           <div class="space-y-1.5">
             <label for="email" class="text-sm font-medium">Hospital email</label>
@@ -159,7 +155,7 @@ async function handleSubmit() {
 
           <div
             v-if="errorMessage"
-            class="mt-5 flex items-center gap-2 rounded-md bg-[#d03b3b]/10 px-3 py-2.5 text-sm text-[#d03b3b]"
+            class="mt-5 flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2.5 text-sm text-danger"
           >
             <AlertTriangle class="h-4 w-4 shrink-0" />
             {{ errorMessage }}
@@ -168,11 +164,11 @@ async function handleSubmit() {
           <button
             type="submit"
             :disabled="isSubmitting"
-            class="mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground shadow-md shadow-primary/20 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            class="mt-5 flex w-full items-center justify-center gap-2 rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <LoaderCircle v-if="isSubmitting" class="h-4 w-4 animate-spin" />
             <LogIn v-else class="h-4 w-4" />
-            {{ isSubmitting ? 'Signing in…' : 'Sign In' }}
+            {{ isSubmitting ? 'Signing in…' : 'Sign in' }}
           </button>
         </form>
 
@@ -183,27 +179,26 @@ async function handleSubmit() {
     </div>
 
     <!-- Brand side -->
-    <div class="relative hidden overflow-hidden bg-primary lg:block">
-      <div class="absolute inset-0 bg-[radial-gradient(circle_at_top,var(--color-primary-foreground),transparent_55%)]/10" />
-      <div class="absolute -top-24 -right-24 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
-      <div class="absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-black/10 blur-3xl" />
+    <div class="relative hidden overflow-hidden bg-sidebar lg:block">
+      <!-- The brand mark, oversized and cropped, as the panel's only ornament -->
+      <AppLogo class="pointer-events-none absolute -bottom-24 -right-24 h-[28rem] w-[28rem] text-sidebar-accent/70" />
 
-      <div class="relative flex h-full flex-col p-12 text-primary-foreground">
+      <div class="relative flex h-full flex-col p-12 text-sidebar-foreground">
         <div class="flex items-center gap-3">
-          <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15 shadow-lg shadow-black/10 ring-1 ring-white/20 backdrop-blur">
-            <Activity class="h-5.5 w-5.5" />
+          <span class="flex h-11 w-11 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+            <AppLogo class="h-6 w-6" />
           </span>
           <div class="leading-tight">
-            <p class="font-semibold tracking-tight">AHDMS</p>
-            <p class="text-xs opacity-70">Butuan Medical Center</p>
+            <p class="font-bold tracking-tight text-sidebar-accent-foreground">AHDMS</p>
+            <p class="text-xs text-sidebar-foreground/60">Butuan Medical Center</p>
           </div>
         </div>
 
-        <div class="flex flex-1 flex-col items-center justify-center text-center">
-          <h2 class="max-w-md text-3xl font-semibold tracking-tight text-balance">
+        <div class="flex flex-1 flex-col justify-center">
+          <h2 class="max-w-md text-4xl font-bold leading-tight tracking-tight text-balance text-sidebar-accent-foreground">
             One dashboard for every step of the discharge process.
           </h2>
-          <p class="mt-4 max-w-sm text-sm opacity-80">
+          <p class="mt-4 max-w-sm text-base text-sidebar-foreground/80">
             Track documentation, task delegation, and discharge status in real time —
             no more paper carts.
           </p>
@@ -212,10 +207,10 @@ async function handleSubmit() {
             <li
               v-for="highlight in brandHighlights"
               :key="highlight.text"
-              class="flex items-center gap-3 rounded-lg bg-white/10 px-4 py-2.5 ring-1 ring-white/10 backdrop-blur"
+              class="flex items-center gap-3 text-sm"
             >
-              <component :is="highlight.icon" class="h-4 w-4 shrink-0 opacity-90" />
-              <span class="text-sm opacity-90">{{ highlight.text }}</span>
+              <component :is="highlight.icon" class="h-4 w-4 shrink-0 text-sidebar-primary" />
+              <span>{{ highlight.text }}</span>
             </li>
           </ul>
         </div>

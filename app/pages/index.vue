@@ -136,9 +136,9 @@ const techStack = [
     <!-- Nav -->
     <header class="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <a href="#" class="flex items-center gap-2 font-semibold tracking-tight">
-          <span class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Activity class="h-4.5 w-4.5" />
+        <a href="#" class="flex items-center gap-2 font-bold tracking-tight">
+          <span class="flex h-8 w-8 items-center justify-center rounded-md bg-sidebar text-sidebar-primary">
+            <AppLogo class="h-4.5 w-4.5" />
           </span>
           <span>AHDMS</span>
         </a>
@@ -213,11 +213,8 @@ const techStack = [
     <main>
       <!-- Hero -->
       <section class="relative overflow-hidden border-b border-border/60">
-        <div
-          class="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,var(--color-primary),transparent_60%)]/8"
-        />
         <div class="mx-auto max-w-6xl px-6 py-20 text-center sm:py-28">
-          <h1 class="mx-auto max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl">
+          <h1 class="mx-auto max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
             Discharging patients shouldn't take longer than treating them.
           </h1>
           <p class="mx-auto mt-6 max-w-2xl text-balance text-lg text-muted-foreground">
@@ -419,7 +416,7 @@ const techStack = [
     <footer class="border-t border-border/60">
       <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-muted-foreground sm:flex-row">
         <div class="flex items-center gap-2">
-          <Activity class="h-4 w-4" />
+          <AppLogo class="h-4 w-4 text-primary" />
           <span>AHDMS &mdash; Automated Hospital Discharge Management System</span>
         </div>
         <div class="flex items-center gap-2">

@@ -1,20 +1,13 @@
 <script setup lang="ts">
 import {
-  Activity,
   AlertTriangle,
-  Bell,
   CheckCircle2,
   ClipboardCheck,
   LayoutDashboard,
   LoaderCircle,
-  LogOut,
-  Menu,
-  Moon,
   Search,
   Stethoscope,
-  Sun,
   Users,
-  X,
 } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 
@@ -36,23 +29,6 @@ useHead({
 const supabase = useSupabaseClient()
 const session = useAdminSession()
 const officerId = computed(() => Number(session.value?.id))
-const officerFullName = computed(() => session.value?.fullName ?? '')
-
-const { isDark, init: initDarkMode, toggle: toggleDarkMode } = useDarkMode()
-onMounted(initDarkMode)
-
-const { initials: officerInitials } = useOfficerName(officerFullName)
-
-const isLoggingOut = ref(false)
-const showLogoutConfirm = ref(false)
-
-async function handleLogout() {
-  isLoggingOut.value = true
-  session.value = null
-  await navigateTo('/loginpage')
-}
-
-const sidebarOpen = ref(false)
 
 const navItems = [
   { label: 'Overview', icon: LayoutDashboard, section: 'overview' },
@@ -145,10 +121,10 @@ const filteredPatients = computed(() => {
 // ── Overview: patient / discharge summary (bar chart) ───────────────────
 
 const summaryBarColor: Record<string, string> = {
-  'Total Patients': '#2a78d6',
-  'Currently Admitted': '#eb6834',
-  'Discharged': '#1baf7a',
-  'Discharge Requests': '#eda100',
+  'Total Patients': 'var(--info)',
+  'Currently Admitted': 'var(--chart-4)',
+  'Discharged': 'var(--success)',
+  'Discharge Requests': 'var(--warning)',
 }
 
 const summaryChartData = computed(() => {
@@ -165,11 +141,11 @@ const summaryChartData = computed(() => {
 const hoveredSummary = ref<string | null>(null)
 
 const statusBarColor: Record<string, string> = {
-  pending: '#fab219',
-  in_progress: '#2a78d6',
-  approved: '#0ca30c',
-  completed: '#898781',
-  rejected: '#d03b3b',
+  pending: 'var(--warning)',
+  in_progress: 'var(--info)',
+  approved: 'var(--success)',
+  completed: 'var(--neutral)',
+  rejected: 'var(--danger)',
 }
 
 const pendingTasks = computed(() => tasks.value.filter((t) => t.status !== 'done'))
@@ -362,444 +338,268 @@ async function submitPatientForm() {
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-muted/30">
-    <!-- Sidebar (desktop) -->
-    <aside class="hidden w-64 shrink-0 flex-col border-r border-border bg-card lg:sticky lg:top-0 lg:flex lg:h-screen">
-      <div class="flex h-16 shrink-0 items-center gap-2.5 border-b border-border px-6">
-        <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Activity class="h-5 w-5" />
-        </span>
-        <span class="font-semibold tracking-tight">AHDMS</span>
+  <div>
+    <DashboardShell
+      v-model:section="activeSection"
+      v-model:search="searchQuery"
+      department="Nursing"
+      role-label="Nurse"
+      :nav-items="navItems"
+      :badges="{ tasks: pendingTasks.length }"
+      :alert="pendingTasks.length > 0"
+    >
+      <div v-if="dataError" class="flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2.5 text-sm text-danger">
+        <AlertTriangle class="h-4 w-4 shrink-0" />
+        {{ dataError }}
       </div>
 
-      <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        <button
-          v-for="item in navItems"
-          :key="item.label"
-          type="button"
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors"
-          :class="activeSection === item.section
-            ? 'bg-primary/10 text-primary'
-            : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
-          @click="activeSection = item.section"
-        >
-          <component :is="item.icon" class="h-4 w-4" />
-          {{ item.label }}
-          <span
-            v-if="item.section === 'tasks' && pendingTasks.length > 0"
-            class="ml-auto rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary"
-          >
-            {{ pendingTasks.length }}
-          </span>
-        </button>
-      </nav>
+      <template v-if="activeSection === 'overview'">
+        <!-- Patients & discharge summary -->
+        <div class="rounded-xl border border-border bg-card p-5">
+          <h2 class="text-base font-bold tracking-tight">Patients &amp; Discharge Summary</h2>
+          <p class="text-xs text-muted-foreground">Overview of your caseload</p>
 
-      <div class="shrink-0 border-t border-border p-3">
-        <div class="flex items-center gap-3 rounded-md px-3 py-2">
-          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-medium text-secondary-foreground">
-            {{ officerInitials || 'RN' }}
-          </span>
-          <div class="min-w-0 flex-1 leading-tight">
-            <p class="truncate text-sm font-medium">{{ officerFullName || 'Nurse' }}</p>
-            <p class="truncate text-xs text-muted-foreground">Patient Records</p>
-          </div>
-        </div>
-        <button
-          type="button"
-          :disabled="isLoggingOut"
-          class="mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-          @click="showLogoutConfirm = true"
-        >
-          <LoaderCircle v-if="isLoggingOut" class="h-4 w-4 animate-spin" />
-          <LogOut v-else class="h-4 w-4" />
-          {{ isLoggingOut ? 'Logging out…' : 'Log Out' }}
-        </button>
-      </div>
-    </aside>
-
-    <!-- Sidebar (mobile) -->
-    <div v-if="sidebarOpen" class="fixed inset-0 z-40 lg:hidden">
-      <div class="absolute inset-0 bg-black/40" @click="sidebarOpen = false" />
-      <aside class="relative flex h-full w-64 flex-col bg-card">
-        <div class="flex h-16 shrink-0 items-center justify-between border-b border-border px-6">
-          <div class="flex items-center gap-2.5">
-            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Activity class="h-5 w-5" />
-            </span>
-            <span class="font-semibold tracking-tight">AHDMS</span>
-          </div>
-          <button aria-label="Close menu" @click="sidebarOpen = false">
-            <X class="h-5 w-5 text-muted-foreground" />
-          </button>
-        </div>
-        <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          <button
-            v-for="item in navItems"
-            :key="item.label"
-            type="button"
-            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors"
-            :class="activeSection === item.section
-              ? 'bg-primary/10 text-primary'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'"
-            @click="activeSection = item.section; sidebarOpen = false"
-          >
-            <component :is="item.icon" class="h-4 w-4" />
-            {{ item.label }}
-          </button>
-        </nav>
-        <div class="shrink-0 border-t border-border p-3">
-          <div class="flex items-center gap-3 rounded-md px-3 py-2">
-            <span class="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-medium text-secondary-foreground">
-              {{ officerInitials || 'RN' }}
-            </span>
-            <div class="min-w-0 flex-1 leading-tight">
-              <p class="truncate text-sm font-medium">{{ officerFullName || 'Nurse' }}</p>
-              <p class="truncate text-xs text-muted-foreground">Patient Records</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            :disabled="isLoggingOut"
-            class="mt-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-            @click="showLogoutConfirm = true"
-          >
-            <LoaderCircle v-if="isLoggingOut" class="h-4 w-4 animate-spin" />
-            <LogOut v-else class="h-4 w-4" />
-            {{ isLoggingOut ? 'Logging out…' : 'Log Out' }}
-          </button>
-        </div>
-      </aside>
-    </div>
-
-    <!-- Main -->
-    <div class="flex min-w-0 flex-1 flex-col">
-      <!-- Top bar -->
-      <header class="flex h-16 items-center gap-4 border-b border-border bg-card px-4 sm:px-6">
-        <button aria-label="Open menu" class="text-muted-foreground lg:hidden" @click="sidebarOpen = true">
-          <Menu class="h-5 w-5" />
-        </button>
-
-        <div class="min-w-0 flex-1">
-          <h1 class="truncate text-base font-semibold tracking-tight">Nurse Dashboard</h1>
-        </div>
-
-        <div class="relative hidden max-w-xs flex-1 sm:block">
-          <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            v-model="searchQuery"
-            type="search"
-            placeholder="Search patients…"
-            class="w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          >
-        </div>
-
-        <button
-          :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-          class="text-muted-foreground hover:text-foreground"
-          @click="toggleDarkMode"
-        >
-          <Sun v-if="isDark" class="h-5 w-5" />
-          <Moon v-else class="h-5 w-5" />
-        </button>
-
-        <button aria-label="Notifications" class="relative text-muted-foreground hover:text-foreground">
-          <Bell class="h-5 w-5" />
-          <span v-if="pendingTasks.length > 0" class="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#d03b3b]" />
-        </button>
-
-        <span class="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-medium text-secondary-foreground">
-          {{ officerInitials || 'RN' }}
-        </span>
-      </header>
-
-      <main class="flex-1 space-y-6 p-4 sm:p-6">
-        <div v-if="dataError" class="flex items-center gap-2 rounded-md bg-[#d03b3b]/10 px-3 py-2.5 text-sm text-[#d03b3b]">
-          <AlertTriangle class="h-4 w-4 shrink-0" />
-          {{ dataError }}
-        </div>
-
-        <template v-if="activeSection === 'overview'">
-          <!-- Patients & discharge summary -->
-          <div class="rounded-xl border border-border bg-card p-5">
-            <h2 class="text-sm font-medium">Patients &amp; Discharge Summary</h2>
-            <p class="text-xs text-muted-foreground">Overview of your caseload</p>
-
-            <div class="mt-6 flex h-40 items-end gap-6 px-2 sm:gap-10">
+          <div class="mt-6 flex h-40 items-end gap-6 px-2 sm:gap-10">
+            <div
+              v-for="bar in summaryChartData"
+              :key="bar.label"
+              class="relative flex h-full flex-1 flex-col items-center justify-end"
+              tabindex="0"
+              role="img"
+              :aria-label="`${bar.label}: ${bar.count}`"
+              @mouseenter="hoveredSummary = bar.label"
+              @mouseleave="hoveredSummary = null"
+              @focus="hoveredSummary = bar.label"
+              @blur="hoveredSummary = null"
+            >
               <div
-                v-for="bar in summaryChartData"
-                :key="bar.label"
-                class="relative flex h-full flex-1 flex-col items-center justify-end"
-                tabindex="0"
-                role="img"
-                :aria-label="`${bar.label}: ${bar.count}`"
-                @mouseenter="hoveredSummary = bar.label"
-                @mouseleave="hoveredSummary = null"
-                @focus="hoveredSummary = bar.label"
-                @blur="hoveredSummary = null"
+                v-if="hoveredSummary === bar.label"
+                class="absolute -top-8 z-10 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-sm"
               >
-                <div
-                  v-if="hoveredSummary === bar.label"
-                  class="absolute -top-8 z-10 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-sm"
-                >
-                  <span class="font-semibold tabular-nums text-popover-foreground">{{ bar.count }}</span>
-                  <span class="ml-1 text-muted-foreground">{{ bar.label }}</span>
-                </div>
-                <span class="mb-1 text-xs font-medium tabular-nums text-foreground">{{ bar.count }}</span>
-                <div
-                  class="w-full max-w-6 rounded-t-[4px] transition-opacity"
-                  :class="hoveredSummary === bar.label ? 'opacity-80' : 'opacity-100'"
-                  :style="{ height: `${bar.heightPct}%`, minHeight: '2px', backgroundColor: bar.color }"
-                />
-                <span class="mt-2 text-center text-xs text-muted-foreground">{{ bar.label }}</span>
+                <span class="font-semibold tabular-nums text-popover-foreground">{{ bar.count }}</span>
+                <span class="ml-1 text-muted-foreground">{{ bar.label }}</span>
               </div>
+              <span class="mb-1 text-xs font-medium tabular-nums text-foreground">{{ bar.count }}</span>
+              <div
+                class="w-full max-w-6 rounded-t-[4px] transition-opacity"
+                :class="hoveredSummary === bar.label ? 'opacity-80' : 'opacity-100'"
+                :style="{ height: `${bar.heightPct}%`, minHeight: '2px', backgroundColor: bar.color }"
+              />
+              <span class="mt-2 text-center text-xs text-muted-foreground">{{ bar.label }}</span>
             </div>
           </div>
+        </div>
 
-          <!-- Needs attention -->
-          <div v-if="pendingTasks.length > 0" class="flex items-center gap-2 rounded-md bg-[#fab219]/10 px-3 py-2.5 text-sm text-[#c98500]">
-            <AlertTriangle class="h-4 w-4 shrink-0" />
-            {{ pendingTasks.length }} nurse clearance task{{ pendingTasks.length === 1 ? '' : 's' }} still awaiting completion.
+        <!-- Needs attention -->
+        <div v-if="pendingTasks.length > 0" class="flex items-center gap-2 rounded-md bg-warning/10 px-3 py-2.5 text-sm text-warning">
+          <AlertTriangle class="h-4 w-4 shrink-0" />
+          {{ pendingTasks.length }} nurse clearance task{{ pendingTasks.length === 1 ? '' : 's' }} still awaiting completion.
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-2">
+          <!-- Recently Admitted Patients -->
+          <div class="rounded-xl border border-border bg-card p-5">
+            <h2 class="text-base font-bold tracking-tight">Recently Admitted Patients</h2>
+            <p class="text-xs text-muted-foreground">Your 5 newest patients</p>
+
+            <ul class="mt-4 divide-y divide-border">
+              <li v-for="patient in recentPatients" :key="patient.patient_id" class="flex items-center justify-between gap-3 py-2.5 text-sm">
+                <div class="min-w-0">
+                  <p class="truncate font-medium">{{ patient.full_name }}</p>
+                  <p class="text-xs text-muted-foreground">Room {{ patient.room_number ?? '—' }}</p>
+                </div>
+                <span class="shrink-0 text-xs text-muted-foreground">{{ patient.admission_date }}</span>
+              </li>
+              <li v-if="recentPatients.length === 0" class="py-6 text-center text-sm text-muted-foreground">No patients yet.</li>
+            </ul>
           </div>
 
-          <div class="grid gap-4 lg:grid-cols-2">
-            <!-- Recently Admitted Patients -->
-            <div class="rounded-xl border border-border bg-card p-5">
-              <h2 class="text-sm font-medium">Recently Admitted Patients</h2>
-              <p class="text-xs text-muted-foreground">Your 5 newest patients</p>
+          <!-- Recent Discharge Requests -->
+          <div class="rounded-xl border border-border bg-card p-5">
+            <h2 class="text-base font-bold tracking-tight">Recent Discharge Requests</h2>
+            <p class="text-xs text-muted-foreground">Your 5 latest submissions</p>
 
-              <ul class="mt-4 divide-y divide-border">
-                <li v-for="patient in recentPatients" :key="patient.patient_id" class="flex items-center justify-between gap-3 py-2.5 text-sm">
-                  <div class="min-w-0">
-                    <p class="truncate font-medium">{{ patient.full_name }}</p>
-                    <p class="text-xs text-muted-foreground">Room {{ patient.room_number ?? '—' }}</p>
-                  </div>
-                  <span class="shrink-0 text-xs text-muted-foreground">{{ patient.admission_date }}</span>
-                </li>
-                <li v-if="recentPatients.length === 0" class="py-6 text-center text-sm text-muted-foreground">No patients yet.</li>
-              </ul>
-            </div>
+            <ul class="mt-4 divide-y divide-border">
+              <li v-for="request in recentDischargeRequests" :key="request.request_id" class="flex items-center justify-between gap-3 py-2.5 text-sm">
+                <div class="min-w-0">
+                  <p class="truncate font-medium">{{ request.patient_name }}</p>
+                  <p class="text-xs text-muted-foreground">{{ new Date(request.timestamp).toLocaleDateString() }}</p>
+                </div>
+                <span
+                  class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium capitalize"
+                  :style="{ backgroundColor: `color-mix(in oklab, ${statusBarColor[request.status] ?? 'var(--neutral)'} 12%, transparent)`, color: statusBarColor[request.status] ?? 'var(--neutral)' }"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: statusBarColor[request.status] ?? 'var(--neutral)' }" />
+                  {{ request.status.replace('_', ' ') }}
+                </span>
+              </li>
+              <li v-if="recentDischargeRequests.length === 0" class="py-6 text-center text-sm text-muted-foreground">No discharge requests yet.</li>
+            </ul>
+          </div>
+        </div>
+      </template>
 
-            <!-- Recent Discharge Requests -->
-            <div class="rounded-xl border border-border bg-card p-5">
-              <h2 class="text-sm font-medium">Recent Discharge Requests</h2>
-              <p class="text-xs text-muted-foreground">Your 5 latest submissions</p>
+      <!-- Patients -->
+      <div v-if="activeSection === 'patients'" class="rounded-xl border border-border bg-card p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-bold tracking-tight">Patient Records</h2>
+            <p class="text-xs text-muted-foreground">
+              {{ searchQuery ? `Showing results for "${searchQuery}"` : 'Patients under your care' }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+            @click="openNewPatientForm"
+          >
+            Add Patient
+          </button>
+        </div>
 
-              <ul class="mt-4 divide-y divide-border">
-                <li v-for="request in recentDischargeRequests" :key="request.request_id" class="flex items-center justify-between gap-3 py-2.5 text-sm">
-                  <div class="min-w-0">
-                    <p class="truncate font-medium">{{ request.patient_name }}</p>
-                    <p class="text-xs text-muted-foreground">{{ new Date(request.timestamp).toLocaleDateString() }}</p>
-                  </div>
+        <div class="mt-4 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-border text-left text-xs text-muted-foreground">
+                <th class="pb-2 pr-4 font-medium">Name</th>
+                <th class="pb-2 pr-4 font-medium">Admitted</th>
+                <th class="pb-2 pr-4 font-medium">Room</th>
+                <th class="pb-2 pr-4 font-medium">PhilHealth No.</th>
+                <th class="pb-2 pr-4 font-medium">Discharge Date</th>
+                <th class="pb-2 font-medium" />
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              <tr v-for="patient in filteredPatients" :key="patient.patient_id">
+                <td class="py-2 pr-4 font-medium">{{ patient.full_name }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ patient.admission_date }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ patient.room_number ?? '—' }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ patient.philhealth_no ?? '—' }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ patient.discharge_date ?? '—' }}</td>
+                <td class="py-2 text-right">
+                  <button type="button" class="text-xs font-medium text-primary hover:underline" @click="openEditPatientForm(patient)">
+                    Edit
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="!isLoadingData && filteredPatients.length === 0">
+                <td colspan="6" class="py-6 text-center text-sm text-muted-foreground">
+                  {{ searchQuery ? 'No patients match your search.' : 'No patients yet.' }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Discharge Requests -->
+      <div v-if="activeSection === 'discharge-requests'" class="rounded-xl border border-border bg-card p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-bold tracking-tight">Discharge Requests</h2>
+            <p class="text-xs text-muted-foreground">Requests you've submitted</p>
+          </div>
+          <button
+            type="button"
+            :disabled="dischargeablePatients.length === 0"
+            class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            @click="openNewRequestForm"
+          >
+            Request Discharge
+          </button>
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-border text-left text-xs text-muted-foreground">
+                <th class="pb-2 pr-4 font-medium">Patient</th>
+                <th class="pb-2 pr-4 font-medium">Billing Verified</th>
+                <th class="pb-2 pr-4 font-medium">Submitted</th>
+                <th class="pb-2 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              <tr v-for="request in dischargeRequests" :key="request.request_id">
+                <td class="py-2 pr-4 font-medium">{{ request.patient_name }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ request.billing_verified ? 'Yes' : 'No' }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ new Date(request.timestamp).toLocaleString() }}</td>
+                <td class="py-2">
                   <span
-                    class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium capitalize"
-                    :style="{ backgroundColor: `${statusBarColor[request.status] ?? '#898781'}1a`, color: statusBarColor[request.status] ?? '#898781' }"
+                    class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium capitalize"
+                    :style="{ backgroundColor: `color-mix(in oklab, ${statusBarColor[request.status] ?? 'var(--neutral)'} 12%, transparent)`, color: statusBarColor[request.status] ?? 'var(--neutral)' }"
                   >
-                    <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: statusBarColor[request.status] ?? '#898781' }" />
+                    <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: statusBarColor[request.status] ?? 'var(--neutral)' }" />
                     {{ request.status.replace('_', ' ') }}
                   </span>
-                </li>
-                <li v-if="recentDischargeRequests.length === 0" class="py-6 text-center text-sm text-muted-foreground">No discharge requests yet.</li>
-              </ul>
-            </div>
-          </div>
-        </template>
-
-        <!-- Patients -->
-        <div v-if="activeSection === 'patients'" class="rounded-xl border border-border bg-card p-5">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 class="text-sm font-medium">Patient Records</h2>
-              <p class="text-xs text-muted-foreground">
-                {{ searchQuery ? `Showing results for "${searchQuery}"` : 'Patients under your care' }}
-              </p>
-            </div>
-            <button
-              type="button"
-              class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
-              @click="openNewPatientForm"
-            >
-              Add Patient
-            </button>
-          </div>
-
-          <div class="mt-4 overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-border text-left text-xs text-muted-foreground">
-                  <th class="pb-2 pr-4 font-medium">Name</th>
-                  <th class="pb-2 pr-4 font-medium">Admitted</th>
-                  <th class="pb-2 pr-4 font-medium">Room</th>
-                  <th class="pb-2 pr-4 font-medium">PhilHealth No.</th>
-                  <th class="pb-2 pr-4 font-medium">Discharge Date</th>
-                  <th class="pb-2 font-medium" />
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                <tr v-for="patient in filteredPatients" :key="patient.patient_id">
-                  <td class="py-2 pr-4 font-medium">{{ patient.full_name }}</td>
-                  <td class="py-2 pr-4 text-muted-foreground">{{ patient.admission_date }}</td>
-                  <td class="py-2 pr-4 text-muted-foreground">{{ patient.room_number ?? '—' }}</td>
-                  <td class="py-2 pr-4 text-muted-foreground">{{ patient.philhealth_no ?? '—' }}</td>
-                  <td class="py-2 pr-4 text-muted-foreground">{{ patient.discharge_date ?? '—' }}</td>
-                  <td class="py-2 text-right">
-                    <button type="button" class="text-xs font-medium text-primary hover:underline" @click="openEditPatientForm(patient)">
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-                <tr v-if="!isLoadingData && filteredPatients.length === 0">
-                  <td colspan="6" class="py-6 text-center text-sm text-muted-foreground">
-                    {{ searchQuery ? 'No patients match your search.' : 'No patients yet.' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Discharge Requests -->
-        <div v-if="activeSection === 'discharge-requests'" class="rounded-xl border border-border bg-card p-5">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 class="text-sm font-medium">Discharge Requests</h2>
-              <p class="text-xs text-muted-foreground">Requests you've submitted</p>
-            </div>
-            <button
-              type="button"
-              :disabled="dischargeablePatients.length === 0"
-              class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              @click="openNewRequestForm"
-            >
-              Request Discharge
-            </button>
-          </div>
-
-          <div class="mt-4 overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-border text-left text-xs text-muted-foreground">
-                  <th class="pb-2 pr-4 font-medium">Patient</th>
-                  <th class="pb-2 pr-4 font-medium">Billing Verified</th>
-                  <th class="pb-2 pr-4 font-medium">Submitted</th>
-                  <th class="pb-2 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                <tr v-for="request in dischargeRequests" :key="request.request_id">
-                  <td class="py-2 pr-4 font-medium">{{ request.patient_name }}</td>
-                  <td class="py-2 pr-4 text-muted-foreground">{{ request.billing_verified ? 'Yes' : 'No' }}</td>
-                  <td class="py-2 pr-4 text-muted-foreground">{{ new Date(request.timestamp).toLocaleString() }}</td>
-                  <td class="py-2">
-                    <span
-                      class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium capitalize"
-                      :style="{ backgroundColor: `${statusBarColor[request.status] ?? '#898781'}1a`, color: statusBarColor[request.status] ?? '#898781' }"
-                    >
-                      <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: statusBarColor[request.status] ?? '#898781' }" />
-                      {{ request.status.replace('_', ' ') }}
-                    </span>
-                  </td>
-                </tr>
-                <tr v-if="!isLoadingData && dischargeRequests.length === 0">
-                  <td colspan="4" class="py-6 text-center text-sm text-muted-foreground">No discharge requests yet.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Tasks -->
-        <div v-if="activeSection === 'tasks'" class="rounded-xl border border-border bg-card p-5">
-          <h2 class="text-sm font-medium">Nurse Clearance Tasks</h2>
-          <p class="text-xs text-muted-foreground">Auto-assigned when a discharge request is filed</p>
-
-          <div v-if="taskActionError" class="mt-4 flex items-center gap-2 rounded-md bg-[#d03b3b]/10 px-3 py-2.5 text-sm text-[#d03b3b]">
-            <AlertTriangle class="h-4 w-4 shrink-0" />
-            {{ taskActionError }}
-          </div>
-
-          <div class="mt-4 overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-border text-left text-xs text-muted-foreground">
-                  <th class="pb-2 pr-4 font-medium">Patient</th>
-                  <th class="pb-2 pr-4 font-medium">Assigned</th>
-                  <th class="pb-2 pr-4 font-medium">Status</th>
-                  <th class="pb-2 font-medium" />
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border">
-                <tr v-for="task in tasks" :key="task.task_id">
-                  <td class="py-2 pr-4 font-medium">{{ task.patient_name }}</td>
-                  <td class="py-2 pr-4 text-muted-foreground">{{ new Date(task.created_at).toLocaleString() }}</td>
-                  <td class="py-2 pr-4">
-                    <span
-                      class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium"
-                      :class="task.status === 'done' ? 'bg-[#0ca30c]/10 text-[#0ca30c]' : 'bg-muted text-muted-foreground'"
-                    >
-                      <CheckCircle2 v-if="task.status === 'done'" class="h-3.5 w-3.5" />
-                      {{ task.status === 'done' ? 'Done' : 'Pending' }}
-                    </span>
-                  </td>
-                  <td class="py-2 text-right">
-                    <button
-                      v-if="task.status !== 'done'"
-                      type="button"
-                      :disabled="completingTaskId === task.task_id"
-                      class="text-xs font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                      @click="completeTask(task.task_id)"
-                    >
-                      {{ completingTaskId === task.task_id ? 'Completing…' : 'Mark Complete' }}
-                    </button>
-                  </td>
-                </tr>
-                <tr v-if="!isLoadingData && tasks.length === 0">
-                  <td colspan="4" class="py-6 text-center text-sm text-muted-foreground">No tasks assigned yet.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </main>
-    </div>
-
-    <!-- Logout confirmation modal -->
-    <div v-if="showLogoutConfirm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40" @click="!isLoggingOut && (showLogoutConfirm = false)" />
-      <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg">
-        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-[#d03b3b]/10">
-          <LogOut class="h-5 w-5 text-[#d03b3b]" />
-        </span>
-        <h2 class="mt-4 text-base font-semibold tracking-tight">Log out of AHDMS?</h2>
-        <p class="mt-1.5 text-sm text-muted-foreground">
-          You'll need to sign in again to access the patient records dashboard.
-        </p>
-
-        <div class="mt-6 flex gap-3">
-          <button
-            type="button"
-            :disabled="isLoggingOut"
-            class="flex-1 rounded-md border border-border py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-            @click="showLogoutConfirm = false"
-          >
-            No, stay
-          </button>
-          <button
-            type="button"
-            :disabled="isLoggingOut"
-            class="flex flex-1 items-center justify-center gap-2 rounded-md bg-[#d03b3b] py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-            @click="handleLogout"
-          >
-            <LoaderCircle v-if="isLoggingOut" class="h-4 w-4 animate-spin" />
-            {{ isLoggingOut ? 'Logging out…' : 'Yes, log out' }}
-          </button>
+                </td>
+              </tr>
+              <tr v-if="!isLoadingData && dischargeRequests.length === 0">
+                <td colspan="4" class="py-6 text-center text-sm text-muted-foreground">No discharge requests yet.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
-    </div>
+
+      <!-- Tasks -->
+      <div v-if="activeSection === 'tasks'" class="rounded-xl border border-border bg-card p-5">
+        <h2 class="text-base font-bold tracking-tight">Nurse Clearance Tasks</h2>
+        <p class="text-xs text-muted-foreground">Auto-assigned when a discharge request is filed</p>
+
+        <div v-if="taskActionError" class="mt-4 flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2.5 text-sm text-danger">
+          <AlertTriangle class="h-4 w-4 shrink-0" />
+          {{ taskActionError }}
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-border text-left text-xs text-muted-foreground">
+                <th class="pb-2 pr-4 font-medium">Patient</th>
+                <th class="pb-2 pr-4 font-medium">Assigned</th>
+                <th class="pb-2 pr-4 font-medium">Status</th>
+                <th class="pb-2 font-medium" />
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border">
+              <tr v-for="task in tasks" :key="task.task_id">
+                <td class="py-2 pr-4 font-medium">{{ task.patient_name }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ new Date(task.created_at).toLocaleString() }}</td>
+                <td class="py-2 pr-4">
+                  <span
+                    class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium"
+                    :class="task.status === 'done' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'"
+                  >
+                    <CheckCircle2 v-if="task.status === 'done'" class="h-3.5 w-3.5" />
+                    {{ task.status === 'done' ? 'Done' : 'Pending' }}
+                  </span>
+                </td>
+                <td class="py-2 text-right">
+                  <button
+                    v-if="task.status !== 'done'"
+                    type="button"
+                    :disabled="completingTaskId === task.task_id"
+                    class="text-xs font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                    @click="completeTask(task.task_id)"
+                  >
+                    {{ completingTaskId === task.task_id ? 'Completing…' : 'Mark Complete' }}
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="!isLoadingData && tasks.length === 0">
+                <td colspan="4" class="py-6 text-center text-sm text-muted-foreground">No tasks assigned yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </DashboardShell>
 
     <!-- Add / edit patient modal -->
     <div v-if="showPatientForm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40" @click="!isSavingPatient && (showPatientForm = false)" />
-      <div class="relative flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-border bg-card p-6 shadow-lg">
+      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isSavingPatient && (showPatientForm = false)" />
+      <div class="relative flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
         <h2 class="shrink-0 text-base font-semibold tracking-tight">
           <template v-if="patientFormStep === 'form'">{{ editingPatientId === null ? 'Add Patient' : 'Edit Patient' }}</template>
           <template v-else>{{ editingPatientId === null ? 'Confirm New Patient' : 'Confirm Patient Changes' }}</template>
@@ -892,7 +692,7 @@ async function submitPatientForm() {
           </div>
         </dl>
 
-          <div v-if="patientFormError" class="mt-4 flex shrink-0 items-center gap-2 rounded-md bg-[#d03b3b]/10 px-3 py-2 text-xs text-[#d03b3b]">
+          <div v-if="patientFormError" class="mt-4 flex shrink-0 items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">
             <AlertTriangle class="h-4 w-4 shrink-0" />
             {{ patientFormError }}
           </div>
@@ -922,8 +722,8 @@ async function submitPatientForm() {
 
     <!-- New discharge request modal -->
     <div v-if="showRequestForm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40" @click="!isSavingRequest && (showRequestForm = false)" />
-      <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg">
+      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isSavingRequest && (showRequestForm = false)" />
+      <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
         <h2 class="text-base font-semibold tracking-tight">New Discharge Request</h2>
         <p class="mt-1 text-xs text-muted-foreground">
           Filing this auto-assigns nurse, doctor, billing, and PhilHealth tasks to on-duty staff.
@@ -961,7 +761,7 @@ async function submitPatientForm() {
             </div>
           </div>
 
-          <div v-if="requestFormError" class="flex items-center gap-2 rounded-md bg-[#d03b3b]/10 px-3 py-2 text-xs text-[#d03b3b]">
+          <div v-if="requestFormError" class="flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">
             <AlertTriangle class="h-4 w-4 shrink-0" />
             {{ requestFormError }}
           </div>
@@ -990,8 +790,8 @@ async function submitPatientForm() {
 
     <!-- Confirm discharge request modal -->
     <div v-if="showConfirmRequest" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/40" @click="!isSavingRequest && (showConfirmRequest = false)" />
-      <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg">
+      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isSavingRequest && (showConfirmRequest = false)" />
+      <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
         <span class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
           <Stethoscope class="h-5 w-5 text-primary" />
         </span>
@@ -1000,7 +800,7 @@ async function submitPatientForm() {
           This will request discharge for <span class="font-medium text-foreground">{{ selectedRequestPatientName }}</span>.
         </p>
 
-        <div v-if="requestFormError" class="mt-4 flex items-center gap-2 rounded-md bg-[#d03b3b]/10 px-3 py-2 text-xs text-[#d03b3b]">
+        <div v-if="requestFormError" class="mt-4 flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">
           <AlertTriangle class="h-4 w-4 shrink-0" />
           {{ requestFormError }}
         </div>
