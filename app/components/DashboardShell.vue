@@ -52,8 +52,8 @@ async function handleLogout() {
 
     <!-- Sidebar: a drawer below lg, pinned at lg and up -->
     <aside
-      class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0"
-      :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+      class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[translate,visibility] duration-200 ease-out lg:visible lg:sticky lg:top-0 lg:h-screen lg:translate-x-0"
+      :class="sidebarOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'"
     >
       <div class="flex h-16 shrink-0 items-center gap-3 px-5">
         <span class="flex h-9 w-9 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
@@ -188,7 +188,7 @@ async function handleLogout() {
           <button
             type="button"
             :disabled="isLoggingOut"
-            class="flex flex-1 items-center justify-center gap-2 rounded-md bg-danger py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            class="flex flex-1 items-center justify-center gap-2 rounded-md bg-danger py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             @click="handleLogout"
           >
             <LoaderCircle v-if="isLoggingOut" class="h-4 w-4 animate-spin" />

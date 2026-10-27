@@ -1,26 +1,26 @@
 <script setup lang="ts">
 import {
+  Activity,
   AlertTriangle,
   ArrowLeft,
-  ClipboardList,
+  ClipboardCheck,
   Eye,
   EyeOff,
-  Gauge,
-  ListChecks,
-  Lock,
   LoaderCircle,
+  Lock,
   LogIn,
   Mail,
-  Sun,
   Moon,
+  ScanText,
+  Sun,
 } from '@lucide/vue'
 import { onMounted, ref } from 'vue'
 import type { AdminSession } from '~/composables/useAdminSession'
 
 const brandHighlights = [
-  { icon: ClipboardList, text: 'Digitized charts & records' },
-  { icon: ListChecks, text: 'Automated task delegation' },
-  { icon: Gauge, text: 'Real-time discharge tracking' },
+  { icon: ScanText, text: 'Digitized charts & records' },
+  { icon: ClipboardCheck, text: 'Automated task delegation' },
+  { icon: Activity, text: 'Real-time discharge tracking' },
 ]
 
 useHead({

@@ -150,10 +150,17 @@
 .page-leave-active {
   transition: opacity 160ms ease, transform 160ms ease;
 }
-.section-enter-from,
-.page-enter-from {
+
+/* Theatre-green focus ring disappears on ward ink; use the mint ring there */
+.bg-sidebar :focus-visible {
+  outline-color: var(--sidebar-ring);
+}
+.section-enter-from {
   opacity: 0;
   transform: translateY(6px);
+}
+.page-enter-from {
+  opacity: 0;
 }
 .section-leave-to,
 .page-leave-to {
@@ -165,4 +172,9 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* One icon weight everywhere: Lucide's default 2px reads heavy at 16px next to Atkinson */
+.lucide {
+  stroke-width: 1.75;
 }

@@ -1,27 +1,28 @@
 <script setup lang="ts">
 import {
   Activity,
-  ClipboardList,
-  FileWarning,
-  Users,
-  FileX,
-  ListChecks,
-  Gauge,
-  ShieldCheck,
-  GraduationCap,
-  Container,
-  Server,
-  Database,
-  Lock,
-  Terminal,
-  ArrowRight,
-  CheckCircle2,
-  Clock,
   AlertTriangle,
+  ArrowRight,
+  BedDouble,
+  CheckCircle2,
+  ClipboardCheck,
+  Clock,
+  Container,
+  Database,
+  FileWarning,
+  FileX,
+  GraduationCap,
+  Lock,
   Menu,
-  X,
-  Sun,
   Moon,
+  PhoneForwarded,
+  ScanText,
+  Server,
+  ShieldCheck,
+  Sun,
+  Terminal,
+  UserRoundCheck,
+  X,
 } from '@lucide/vue'
 import { onMounted, ref } from 'vue'
 
@@ -50,12 +51,12 @@ const navLinks = [
 
 const problemStats = [
   {
-    icon: Users,
+    icon: BedDouble,
     value: '5–11',
     label: 'Patients in the discharge queue at a given time',
   },
   {
-    icon: Activity,
+    icon: UserRoundCheck,
     value: '3–5',
     label: 'Nurses on duty to handle that same queue',
   },
@@ -73,7 +74,7 @@ const paperCartIssues = [
     text: 'Physical nurse carts mean paperwork can be misfiled, delayed, or go missing entirely.',
   },
   {
-    icon: Users,
+    icon: PhoneForwarded,
     title: 'Back-and-forth communication',
     text: 'Departments coordinate by phone calls and physical routing instead of shared status updates.',
   },
@@ -86,17 +87,17 @@ const paperCartIssues = [
 
 const features = [
   {
-    icon: ClipboardList,
+    icon: ScanText,
     title: 'Automated Document Processing',
     text: 'Digitizes medical charts, physician notes, and patient records so staff retrieve and verify information in seconds, not trips across the ward.',
   },
   {
-    icon: ListChecks,
+    icon: ClipboardCheck,
     title: 'Automated Task Delegation',
     text: 'Assigns discharge tasks — medical clearance, billing verification, and more — based on real-time staff availability.',
   },
   {
-    icon: Gauge,
+    icon: Activity,
     title: 'Real-Time Discharge Progress Monitoring',
     text: 'A live dashboard tracks every patient’s discharge status — pending, in progress, or completed — across all departments.',
   },
@@ -283,7 +284,7 @@ const techStack = [
                 :key="issue.title"
                 class="rounded-xl border border-border bg-card p-6 text-card-foreground"
               >
-                <component :is="issue.icon" class="h-5 w-5 text-primary" />
+                <component :is="issue.icon" class="h-5 w-5 text-danger" />
                 <h4 class="mt-4 font-medium">{{ issue.title }}</h4>
                 <p class="mt-2 text-sm text-muted-foreground">{{ issue.text }}</p>
               </div>
@@ -341,8 +342,8 @@ const techStack = [
               :key="feature.title"
               class="rounded-xl border border-border bg-card p-8 text-card-foreground"
             >
-              <span class="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10">
-                <component :is="feature.icon" class="h-5 w-5 text-primary" />
+              <span class="flex h-11 w-11 items-center justify-center rounded-md bg-sidebar text-sidebar-primary">
+                <component :is="feature.icon" class="h-5 w-5" />
               </span>
               <h3 class="mt-5 font-medium">{{ feature.title }}</h3>
               <p class="mt-2 text-sm text-muted-foreground">{{ feature.text }}</p>

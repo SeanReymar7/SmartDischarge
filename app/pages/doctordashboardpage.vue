@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import {
   AlertTriangle,
+  BedSingle,
   CheckCircle2,
   Circle,
-  ClipboardCheck,
   Clock,
+  DoorOpen,
   LayoutDashboard,
   LoaderCircle,
-  Stethoscope,
+  Signature,
   TrendingUp,
-  Users,
   XCircle,
 } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
@@ -35,9 +35,9 @@ const doctorId = computed(() => Number(session.value?.id))
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, section: 'overview' },
-  { label: 'Discharge Requests', icon: Stethoscope, section: 'discharge-requests' },
-  { label: 'My Sign-offs', icon: ClipboardCheck, section: 'tasks' },
-  { label: 'Patients', icon: Users, section: 'patients' },
+  { label: 'Discharge Requests', icon: DoorOpen, section: 'discharge-requests' },
+  { label: 'My Sign-offs', icon: Signature, section: 'tasks' },
+  { label: 'Patients', icon: BedSingle, section: 'patients' },
 ] as const
 
 type Section = typeof navItems[number]['section']
@@ -126,9 +126,9 @@ const statTiles = computed(() => {
   const pending = dischargeRequests.value.filter((r) => r.status === 'pending' || r.status === 'in_progress').length
   const approved = dischargeRequests.value.filter((r) => r.status === 'approved').length
   return [
-    { icon: Stethoscope, label: 'Awaiting Sign-off', value: String(pending) },
-    { icon: CheckCircle2, label: 'Approved', value: String(approved) },
-    { icon: Users, label: 'Total Requests', value: String(dischargeRequests.value.length) },
+    { icon: Signature, tone: 'bg-warning/10 text-warning', label: 'Awaiting Sign-off', value: String(pending) },
+    { icon: CheckCircle2, tone: 'bg-success/10 text-success', label: 'Approved', value: String(approved) },
+    { icon: DoorOpen, tone: 'bg-primary/10 text-primary', label: 'Total Requests', value: String(dischargeRequests.value.length) },
   ]
 })
 
@@ -318,8 +318,8 @@ function viewPatientById(patientId: number) {
           :key="tile.label"
           class="rounded-xl border border-border bg-card p-5"
         >
-          <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-            <component :is="tile.icon" class="h-4.5 w-4.5 text-primary" />
+          <span class="flex h-9 w-9 items-center justify-center rounded-md" :class="tile.tone">
+            <component :is="tile.icon" class="h-4.5 w-4.5" />
           </span>
           <p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">{{ tile.value }}</p>
           <p class="mt-1 text-sm text-muted-foreground">{{ tile.label }}</p>

@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import {
   AlertTriangle,
+  BedSingle,
   CheckCircle2,
   Circle,
   Clock,
+  DoorOpen,
+  IdCard,
   LayoutDashboard,
   LoaderCircle,
+  ReceiptText,
   Settings,
-  Stethoscope,
   TrendingUp,
-  UserPlus,
-  Users,
+  UserRoundCheck,
   XCircle,
 } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
@@ -36,9 +38,9 @@ const officerId = computed(() => Number(session.value?.id))
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, section: 'overview' },
-  { label: 'Discharge Queue', icon: Stethoscope, section: 'discharge-queue' },
-  { label: 'Patients', icon: Users, section: 'patients' },
-  { label: 'Staff', icon: UserPlus, section: 'staff' },
+  { label: 'Discharge Queue', icon: DoorOpen, section: 'discharge-queue' },
+  { label: 'Patients', icon: BedSingle, section: 'patients' },
+  { label: 'Staff', icon: IdCard, section: 'staff' },
   { label: 'Settings', icon: Settings, section: 'settings' },
 ] as const
 
@@ -239,10 +241,10 @@ const onDutyCount = computed(() => officers.value.filter((o) => o.duty_status ==
 const patientsInQueue = computed(() => patients.value.filter((p) => !p.discharge_date).length)
 
 const statTiles = computed(() => [
-  { icon: Users, label: 'Patients in Queue', value: String(patientsInQueue.value) },
-  { icon: Stethoscope, label: 'Staff on Duty', value: `${onDutyCount.value} of ${officers.value.length}` },
-  { icon: CheckCircle2, label: 'Completed Discharges', value: String(dischargeRequests.value.filter((r) => r.status === 'completed').length) },
-  { icon: AlertTriangle, label: 'Awaiting Billing', value: String(dischargeRequests.value.filter((r) => !r.billing_verified && r.status !== 'rejected' && r.status !== 'completed').length) },
+  { icon: BedSingle, tone: 'bg-info/10 text-info', label: 'Patients in Queue', value: String(patientsInQueue.value) },
+  { icon: UserRoundCheck, tone: 'bg-primary/10 text-primary', label: 'Staff on Duty', value: `${onDutyCount.value} of ${officers.value.length}` },
+  { icon: DoorOpen, tone: 'bg-success/10 text-success', label: 'Completed Discharges', value: String(dischargeRequests.value.filter((r) => r.status === 'completed').length) },
+  { icon: ReceiptText, tone: 'bg-warning/10 text-warning', label: 'Awaiting Billing', value: String(dischargeRequests.value.filter((r) => !r.billing_verified && r.status !== 'rejected' && r.status !== 'completed').length) },
 ])
 
 const dischargeStatusIcon: Record<string, typeof Clock> = {
@@ -328,8 +330,8 @@ const hoveredDay = ref<number | null>(null)
           :key="tile.label"
           class="rounded-xl border border-border bg-card p-5"
         >
-          <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-            <component :is="tile.icon" class="h-4.5 w-4.5 text-primary" />
+          <span class="flex h-9 w-9 items-center justify-center rounded-md" :class="tile.tone">
+            <component :is="tile.icon" class="h-4.5 w-4.5" />
           </span>
           <p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">{{ tile.value }}</p>
           <p class="mt-1 text-sm text-muted-foreground">{{ tile.label }}</p>

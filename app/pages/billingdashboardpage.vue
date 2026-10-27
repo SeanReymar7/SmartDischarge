@@ -197,22 +197,22 @@ async function submitClearBilling() {
       <template v-if="activeSection === 'overview'">
         <div class="grid gap-4 sm:grid-cols-3">
           <div class="rounded-xl border border-border bg-card p-5">
-            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <ClipboardCheck class="h-4.5 w-4.5 text-primary" />
+            <span class="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <ClipboardCheck class="h-4.5 w-4.5" />
             </span>
             <p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">{{ pendingTasks.length }}</p>
             <p class="mt-1 text-sm text-muted-foreground">Open Tasks</p>
           </div>
           <div class="rounded-xl border border-border bg-card p-5">
-            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <ReceiptText class="h-4.5 w-4.5 text-primary" />
+            <span class="flex h-9 w-9 items-center justify-center rounded-md bg-warning/10 text-warning">
+              <ReceiptText class="h-4.5 w-4.5" />
             </span>
             <p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">{{ unverifiedRequests.length }}</p>
             <p class="mt-1 text-sm text-muted-foreground">Awaiting Billing Clearance</p>
           </div>
           <div class="rounded-xl border border-border bg-card p-5">
-            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <CheckCircle2 class="h-4.5 w-4.5 text-primary" />
+            <span class="flex h-9 w-9 items-center justify-center rounded-md bg-success/10 text-success">
+              <CheckCircle2 class="h-4.5 w-4.5" />
             </span>
             <p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">{{ tasks.filter((t) => t.status === 'done').length }}</p>
             <p class="mt-1 text-sm text-muted-foreground">Tasks Completed</p>

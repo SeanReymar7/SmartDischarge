@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import {
   AlertTriangle,
+  BedSingle,
   CheckCircle2,
   ClipboardCheck,
+  DoorOpen,
   LayoutDashboard,
   LoaderCircle,
   Search,
-  Stethoscope,
-  Users,
 } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 
@@ -32,8 +32,8 @@ const officerId = computed(() => Number(session.value?.id))
 
 const navItems = [
   { label: 'Overview', icon: LayoutDashboard, section: 'overview' },
-  { label: 'My Patients', icon: Users, section: 'patients' },
-  { label: 'Discharge Requests', icon: Stethoscope, section: 'discharge-requests' },
+  { label: 'My Patients', icon: BedSingle, section: 'patients' },
+  { label: 'Discharge Requests', icon: DoorOpen, section: 'discharge-requests' },
   { label: 'My Tasks', icon: ClipboardCheck, section: 'tasks' },
 ] as const
 
@@ -793,7 +793,7 @@ async function submitPatientForm() {
       <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isSavingRequest && (showConfirmRequest = false)" />
       <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
         <span class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-          <Stethoscope class="h-5 w-5 text-primary" />
+          <DoorOpen class="h-5 w-5 text-primary" />
         </span>
         <h2 class="mt-4 text-base font-semibold tracking-tight">Submit discharge request?</h2>
         <p class="mt-1.5 text-sm text-muted-foreground">
