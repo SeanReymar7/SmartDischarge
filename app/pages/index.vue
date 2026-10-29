@@ -93,8 +93,8 @@ const features = [
   },
   {
     icon: ClipboardCheck,
-    title: 'Automated Task Delegation',
-    text: 'Assigns discharge tasks — medical clearance, billing verification, and more — based on real-time staff availability.',
+    title: 'Nurse → Doctor → Billing Flow',
+    text: 'Nurses submit the patient chart, the doctor reviews it and approves the discharge, and billing computes the expenses — no paper routing.',
   },
   {
     icon: Activity,
@@ -303,7 +303,7 @@ const techStack = [
             </h2>
             <p class="mt-4 text-muted-foreground">
               The Automated Hospital Discharge Management System is a web-based platform that
-              digitizes records, delegates tasks intelligently, and gives every department
+              digitizes patient charts, routes each discharge from nurse to doctor to billing, and gives every department
               visibility into where each patient stands — replacing the paper trail with a
               single source of truth.
             </p>
@@ -400,7 +400,7 @@ const techStack = [
         </h2>
         <p class="mx-auto mt-4 max-w-xl text-muted-foreground">
           This proposal outlines how AHDMS can reduce discharge bottlenecks through automation,
-          real-time monitoring, and smarter task delegation.
+          real-time monitoring, and a clear nurse-to-doctor-to-billing flow.
         </p>
         <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <a

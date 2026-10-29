@@ -36,7 +36,6 @@ const doctorId = computed(() => Number(session.value?.id))
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, section: 'overview' },
   { label: 'Discharge Requests', icon: DoorOpen, section: 'discharge-requests' },
-  { label: 'My Sign-offs', icon: Signature, section: 'tasks' },
   { label: 'Patients', icon: BedSingle, section: 'patients' },
 ] as const
 
@@ -66,22 +65,11 @@ interface DischargeRequest {
   requested_by_name: string
   approved_by_name: string | null
   status: string
-  billing_verified: boolean
   timestamp: string
-}
-
-interface DoctorTask {
-  task_id: number
-  discharge_request_id: number
-  patient_id: number
-  patient_name: string
-  status: string
-  created_at: string
 }
 
 const requestStatusColor: Record<string, string> = {
   pending: 'var(--warning)',
-  in_progress: 'var(--info)',
   approved: 'var(--success)',
   completed: 'var(--neutral)',
   rejected: 'var(--danger)',
@@ -89,7 +77,6 @@ const requestStatusColor: Record<string, string> = {
 
 const patients = ref<Patient[]>([])
 const dischargeRequests = ref<DischargeRequest[]>([])
-const tasks = ref<DoctorTask[]>([])
 const isLoadingData = ref(false)
 const dataError = ref('')
 
@@ -97,10 +84,9 @@ async function loadDashboardData() {
   isLoadingData.value = true
   const errors: string[] = []
 
-  const [patientsRes, requestsRes, tasksRes] = await Promise.all([
+  const [patientsRes, requestsRes] = await Promise.all([
     supabase.rpc('list_all_patients'),
     supabase.rpc('list_discharge_requests_detailed', { p_status: null }),
-    supabase.rpc('list_tasks_for_officer_detailed', { p_officer_id: doctorId.value }),
   ])
 
   if (patientsRes.error) errors.push(`Patients: ${patientsRes.error.message}`)
@@ -109,24 +95,20 @@ async function loadDashboardData() {
   if (requestsRes.error) errors.push(`Discharge requests: ${requestsRes.error.message}`)
   else dischargeRequests.value = requestsRes.data ?? []
 
-  if (tasksRes.error) errors.push(`Sign-off tasks: ${tasksRes.error.message}`)
-  else tasks.value = tasksRes.data ?? []
-
   dataError.value = errors.join(' ')
   isLoadingData.value = false
 }
 
 onMounted(loadDashboardData)
 
-const pendingTasks = computed(() => tasks.value.filter((t) => t.status !== 'done'))
+const pendingRequests = computed(() => dischargeRequests.value.filter((r) => r.status === 'pending'))
 
 // ── Overview stats ───────────────────────────────────────────────────
 
 const statTiles = computed(() => {
-  const pending = dischargeRequests.value.filter((r) => r.status === 'pending' || r.status === 'in_progress').length
   const approved = dischargeRequests.value.filter((r) => r.status === 'approved').length
   return [
-    { icon: Signature, tone: 'bg-warning/10 text-warning', label: 'Awaiting Sign-off', value: String(pending) },
+    { icon: Signature, tone: 'bg-warning/10 text-warning', label: 'Awaiting Approval', value: String(pendingRequests.value.length) },
     { icon: CheckCircle2, tone: 'bg-success/10 text-success', label: 'Approved', value: String(approved) },
     { icon: DoorOpen, tone: 'bg-primary/10 text-primary', label: 'Total Requests', value: String(dischargeRequests.value.length) },
   ]
@@ -134,14 +116,13 @@ const statTiles = computed(() => {
 
 const dischargeStatusIcon: Record<string, typeof Clock> = {
   pending: Clock,
-  in_progress: Clock,
   approved: CheckCircle2,
   rejected: XCircle,
   completed: Circle,
 }
 
 const dischargeStatus = computed(() => {
-  const order = ['pending', 'in_progress', 'approved', 'completed', 'rejected']
+  const order = ['pending', 'approved', 'completed', 'rejected']
   const counts = order.map((label) => ({
     label,
     count: dischargeRequests.value.filter((r) => r.status === label).length,
@@ -156,7 +137,7 @@ const hoveredStatus = ref<number | null>(null)
 
 // Discharges per day, current week (Mon–Sun) vs. the same weekday last
 // week, counted off patients.discharge_date (set when a request is
-// finalized via complete_discharge_request).
+// completed by billing via clear_billing).
 function startOfWeek(date: Date) {
   const d = new Date(date)
   const day = d.getDay()
@@ -201,34 +182,13 @@ const weeklyDeltaPct = computed(() => {
 })
 const hoveredDay = ref<number | null>(null)
 
-// ── Sign-off tasks ───────────────────────────────────────────────────
+// ── Approve / reject ─────────────────────────────────────────────────
 
-const completingTaskId = ref<number | null>(null)
-const taskActionError = ref('')
-
-async function completeTask(taskId: number) {
-  completingTaskId.value = taskId
-  taskActionError.value = ''
-
-  const { error } = await supabase.rpc('complete_task', { p_task_id: taskId })
-
-  if (error) {
-    taskActionError.value = error.message
-    completingTaskId.value = null
-    return
-  }
-
-  completingTaskId.value = null
-  await loadDashboardData()
-}
-
-// ── Approve / reject / finalize ─────────────────────────────────────
-
-const pendingAction = ref<{ request: DischargeRequest; kind: 'approve' | 'reject' | 'finalize' } | null>(null)
+const pendingAction = ref<{ request: DischargeRequest; kind: 'approve' | 'reject' } | null>(null)
 const isProcessingAction = ref(false)
 const actionError = ref('')
 
-function confirmAction(request: DischargeRequest, kind: 'approve' | 'reject' | 'finalize') {
+function confirmAction(request: DischargeRequest, kind: 'approve' | 'reject') {
   actionError.value = ''
   pendingAction.value = { request, kind }
 }
@@ -241,9 +201,7 @@ async function runPendingAction() {
   const { request, kind } = pendingAction.value
   const { error } = kind === 'approve'
     ? await supabase.rpc('approve_discharge_request', { p_request_id: request.request_id, p_approved_by: doctorId.value })
-    : kind === 'reject'
-      ? await supabase.rpc('reject_discharge_request', { p_request_id: request.request_id, p_rejected_by: doctorId.value })
-      : await supabase.rpc('complete_discharge_request', { p_request_id: request.request_id })
+    : await supabase.rpc('reject_discharge_request', { p_request_id: request.request_id, p_rejected_by: doctorId.value })
 
   if (error) {
     actionError.value = error.message
@@ -252,11 +210,12 @@ async function runPendingAction() {
   }
 
   pendingAction.value = null
+  chartPatient.value = null
   isProcessingAction.value = false
   await loadDashboardData()
 }
 
-// ── Patients (read-only) ─────────────────────────────────────────────────
+// ── Patients: read the chart, add advice ─────────────────────────────────
 
 const patientSearchQuery = ref('')
 
@@ -271,26 +230,16 @@ const filteredPatients = computed(() => {
   })
 })
 
-const viewingPatient = ref<Patient | null>(null)
+const chartPatient = ref<Patient | null>(null)
 
-const viewingPatientFields = computed(() => {
-  const p = viewingPatient.value
-  if (!p) return []
-  return [
-    { label: 'Full name', value: p.full_name },
-    { label: 'Age', value: p.age ?? '—' },
-    { label: 'Date of birth', value: p.date_of_birth ?? '—' },
-    { label: 'Contact number', value: p.contact_number ?? '—' },
-    { label: 'Emergency contact', value: p.emergency_contact ?? '—' },
-    { label: 'Admission date', value: p.admission_date },
-    { label: 'Room number', value: p.room_number ?? '—' },
-    { label: 'PhilHealth No.', value: p.philhealth_no ?? '—' },
-    { label: 'Discharge date', value: p.discharge_date ?? '—' },
-  ]
-})
+// Approve/reject only live inside the chart, so the doctor always sees the
+// nurse's records before deciding.
+const reviewingRequest = computed(() => dischargeRequests.value.find(
+  (r) => r.patient_id === chartPatient.value?.patient_id && r.status === 'pending',
+))
 
 function viewPatientById(patientId: number) {
-  viewingPatient.value = patients.value.find((p) => p.patient_id === patientId) ?? null
+  chartPatient.value = patients.value.find((p) => p.patient_id === patientId) ?? null
 }
 </script>
 
@@ -302,8 +251,8 @@ function viewPatientById(patientId: number) {
       department="Physicians"
       role-label="Attending physician"
       :nav-items="navItems"
-      :badges="{ tasks: pendingTasks.length }"
-      :alert="pendingTasks.length > 0"
+      :badges="{ 'discharge-requests': pendingRequests.length }"
+      :alert="pendingRequests.length > 0"
     >
       <div v-if="dataError" class="flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2.5 text-sm text-danger">
         <AlertTriangle class="h-4 w-4 shrink-0" />
@@ -444,7 +393,7 @@ function viewPatientById(patientId: number) {
           <div>
             <h2 class="text-base font-bold tracking-tight">Discharge Requests</h2>
             <p class="text-xs text-muted-foreground">
-              Hospital-wide, all nurses
+              Review the nurse's chart, see the patient personally if needed, then approve or reject
             </p>
           </div>
         </div>
@@ -455,7 +404,6 @@ function viewPatientById(patientId: number) {
               <tr class="border-b border-border text-left text-xs text-muted-foreground">
                 <th class="pb-2 pr-4 font-medium">Patient</th>
                 <th class="pb-2 pr-4 font-medium">Requested By</th>
-                <th class="pb-2 pr-4 font-medium">Billing Verified</th>
                 <th class="pb-2 pr-4 font-medium">Submitted</th>
                 <th class="pb-2 pr-4 font-medium">Status</th>
                 <th class="pb-2 font-medium" />
@@ -469,7 +417,6 @@ function viewPatientById(patientId: number) {
                   </button>
                 </td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ request.requested_by_name }}</td>
-                <td class="py-2 pr-4 text-muted-foreground">{{ request.billing_verified ? 'Yes' : 'No' }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ new Date(request.timestamp).toLocaleString() }}</td>
                 <td class="py-2 pr-4">
                   <span
@@ -481,79 +428,18 @@ function viewPatientById(patientId: number) {
                   </span>
                 </td>
                 <td class="py-2 text-right">
-                  <div v-if="request.status === 'pending' || request.status === 'in_progress'" class="flex justify-end gap-3">
-                    <button type="button" class="text-xs font-medium text-success hover:underline" @click="confirmAction(request, 'approve')">
-                      Approve
-                    </button>
-                    <button type="button" class="text-xs font-medium text-danger hover:underline" @click="confirmAction(request, 'reject')">
-                      Reject
-                    </button>
-                  </div>
                   <button
-                    v-else-if="request.status === 'approved'"
+                    v-if="request.status === 'pending'"
                     type="button"
                     class="text-xs font-medium text-primary hover:underline"
-                    @click="confirmAction(request, 'finalize')"
+                    @click="viewPatientById(request.patient_id)"
                   >
-                    Finalize Discharge
+                    Review Chart
                   </button>
                 </td>
               </tr>
               <tr v-if="!isLoadingData && dischargeRequests.length === 0">
-                <td colspan="6" class="py-6 text-center text-sm text-muted-foreground">No discharge requests yet.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- My Sign-offs -->
-      <div v-if="activeSection === 'tasks'" class="rounded-xl border border-border bg-card p-5">
-        <h2 class="text-base font-bold tracking-tight">Doctor Sign-off Tasks</h2>
-        <p class="text-xs text-muted-foreground">Auto-assigned when a discharge request is filed</p>
-
-        <div v-if="taskActionError" class="mt-4 flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2.5 text-sm text-danger">
-          <AlertTriangle class="h-4 w-4 shrink-0" />
-          {{ taskActionError }}
-        </div>
-
-        <div class="mt-4 overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-border text-left text-xs text-muted-foreground">
-                <th class="pb-2 pr-4 font-medium">Patient</th>
-                <th class="pb-2 pr-4 font-medium">Assigned</th>
-                <th class="pb-2 pr-4 font-medium">Status</th>
-                <th class="pb-2 font-medium" />
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              <tr v-for="task in tasks" :key="task.task_id">
-                <td class="py-2 pr-4 font-medium">{{ task.patient_name }}</td>
-                <td class="py-2 pr-4 text-muted-foreground">{{ new Date(task.created_at).toLocaleString() }}</td>
-                <td class="py-2 pr-4">
-                  <span
-                    class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium"
-                    :class="task.status === 'done' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'"
-                  >
-                    <CheckCircle2 v-if="task.status === 'done'" class="h-3.5 w-3.5" />
-                    {{ task.status === 'done' ? 'Done' : 'Pending' }}
-                  </span>
-                </td>
-                <td class="py-2 text-right">
-                  <button
-                    v-if="task.status !== 'done'"
-                    type="button"
-                    :disabled="completingTaskId === task.task_id"
-                    class="text-xs font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                    @click="completeTask(task.task_id)"
-                  >
-                    {{ completingTaskId === task.task_id ? 'Completing…' : 'Mark Complete' }}
-                  </button>
-                </td>
-              </tr>
-              <tr v-if="!isLoadingData && tasks.length === 0">
-                <td colspan="4" class="py-6 text-center text-sm text-muted-foreground">No sign-off tasks assigned yet.</td>
+                <td colspan="5" class="py-6 text-center text-sm text-muted-foreground">No discharge requests yet.</td>
               </tr>
             </tbody>
           </table>
@@ -565,7 +451,7 @@ function viewPatientById(patientId: number) {
         <div>
           <h2 class="text-base font-bold tracking-tight">Patient Records</h2>
           <p class="text-xs text-muted-foreground">
-            {{ patientSearchQuery ? `Showing results for "${patientSearchQuery}"` : 'All patients, hospital-wide (read-only)' }}
+            {{ patientSearchQuery ? `Showing results for "${patientSearchQuery}"` : 'All patients, hospital-wide' }}
           </p>
         </div>
 
@@ -589,8 +475,8 @@ function viewPatientById(patientId: number) {
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.philhealth_no ?? '—' }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.discharge_date ?? '—' }}</td>
                 <td class="py-2 text-right">
-                  <button type="button" class="text-xs font-medium text-primary hover:underline" @click="viewingPatient = patient">
-                    View
+                  <button type="button" class="text-xs font-medium text-primary hover:underline" @click="chartPatient = patient">
+                    Chart
                   </button>
                 </td>
               </tr>
@@ -605,7 +491,32 @@ function viewPatientById(patientId: number) {
       </div>
     </DashboardShell>
 
-    <!-- Approve / reject / finalize confirmation modal -->
+    <PatientChart
+      v-if="chartPatient"
+      :patient="chartPatient"
+      :officer-id="doctorId"
+      :can-add="['doctor_order']"
+      @close="chartPatient = null"
+    >
+      <template v-if="reviewingRequest" #actions>
+        <button
+          type="button"
+          class="flex-1 rounded-md border border-danger/40 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/10"
+          @click="confirmAction(reviewingRequest, 'reject')"
+        >
+          Reject
+        </button>
+        <button
+          type="button"
+          class="flex-1 rounded-md bg-success py-2 text-sm font-medium text-background transition-opacity hover:opacity-90"
+          @click="confirmAction(reviewingRequest, 'approve')"
+        >
+          Approve Discharge
+        </button>
+      </template>
+    </PatientChart>
+
+    <!-- Approve / reject confirmation modal -->
     <div v-if="pendingAction" class="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isProcessingAction && (pendingAction = null)" />
       <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
@@ -618,19 +529,14 @@ function viewPatientById(patientId: number) {
         </span>
         <h2 class="mt-4 text-base font-semibold tracking-tight">
           <template v-if="pendingAction.kind === 'approve'">Approve discharge request?</template>
-          <template v-else-if="pendingAction.kind === 'reject'">Reject discharge request?</template>
-          <template v-else>Finalize discharge?</template>
+          <template v-else>Reject discharge request?</template>
         </h2>
         <p class="mt-1.5 text-sm text-muted-foreground">
           <template v-if="pendingAction.kind === 'approve'">
-            Requires every task done and billing verified for
-            <span class="font-medium text-foreground">{{ pendingAction.request.patient_name }}</span>.
-          </template>
-          <template v-else-if="pendingAction.kind === 'reject'">
-            This will mark <span class="font-medium text-foreground">{{ pendingAction.request.patient_name }}</span>'s discharge request as rejected.
+            <span class="font-medium text-foreground">{{ pendingAction.request.patient_name }}</span> will be sent to billing, who will compute the expenses and complete the discharge.
           </template>
           <template v-else>
-            This will mark <span class="font-medium text-foreground">{{ pendingAction.request.patient_name }}</span> as officially discharged.
+            This will mark <span class="font-medium text-foreground">{{ pendingAction.request.patient_name }}</span>'s discharge request as rejected.
           </template>
         </p>
 
@@ -662,27 +568,5 @@ function viewPatientById(patientId: number) {
       </div>
     </div>
 
-    <!-- Patient view modal -->
-    <div v-if="viewingPatient" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="viewingPatient = null" />
-      <div class="relative flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
-        <h2 class="shrink-0 text-base font-semibold tracking-tight">Patient Information</h2>
-
-        <dl class="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          <div v-for="field in viewingPatientFields" :key="field.label" class="flex justify-between gap-4 border-b border-border pb-2 text-sm">
-            <dt class="text-muted-foreground">{{ field.label }}</dt>
-            <dd class="text-right font-medium">{{ field.value }}</dd>
-          </div>
-        </dl>
-
-        <button
-          type="button"
-          class="mt-4 shrink-0 rounded-md border border-border py-2 text-sm font-medium transition-colors hover:bg-muted"
-          @click="viewingPatient = null"
-        >
-          Close
-        </button>
-      </div>
-    </div>
   </div>
 </template>

@@ -14,7 +14,7 @@ create extension if not exists pgcrypto with schema extensions;
 -- WARNING: this deletes existing data in these tables.
 -- ============================================
 drop table if exists billing cascade;
-drop table if exists tasks cascade;
+drop table if exists chart_entries cascade;
 drop table if exists discharge_requests cascade;
 drop table if exists patients cascade;
 drop table if exists credentials cascade;
@@ -64,49 +64,48 @@ create table patients (
 
 -- ============================================
 -- 4. DISCHARGE_REQUESTS
+-- pending -> approved (doctor) -> completed (billing cleared), or rejected.
+-- approved_by records the doctor who approved or rejected.
 -- ============================================
 create table discharge_requests (
-    request_id          bigint generated always as identity primary key,
-    patient_id           bigint not null references patients(patient_id) on delete cascade,
-    requested_by         bigint not null references officers(officer_id),
-    approved_by          bigint references officers(officer_id),
-    status                text not null default 'pending'
-                          check (status in ('pending', 'in_progress', 'approved', 'completed', 'rejected')),
-    billing_verified      boolean not null default false,
-    "timestamp"           timestamptz not null default now()
+    request_id      bigint generated always as identity primary key,
+    patient_id      bigint not null references patients(patient_id) on delete cascade,
+    requested_by    bigint not null references officers(officer_id),
+    approved_by     bigint references officers(officer_id),
+    status          text not null default 'pending'
+                     check (status in ('pending', 'approved', 'completed', 'rejected')),
+    "timestamp"     timestamptz not null default now()
 );
 
 -- ============================================
--- 5. TASKS
--- Auto-assigned to available, on-duty officers matching required role.
--- task_type keeps billing vs philhealth work distinguishable
--- even though both are handled by the 'billing' role.
+-- 5. CHART_ENTRIES
+-- The patient chart. Nurses record vital signs, nursing notes,
+-- medication and other records; doctors add their advice/orders.
+-- `details` holds the type's fields (see app/components/PatientChart.vue).
 -- ============================================
-create table tasks (
-    task_id                 bigint generated always as identity primary key,
-    discharge_request_id    bigint not null references discharge_requests(request_id) on delete cascade,
-    assigned_to             bigint references officers(officer_id),
-    task_type               text not null
-                             check (task_type in ('nurse_clearance', 'doctor_signoff', 'billing_clearance', 'philhealth_documentation')),
-    status                  text not null default 'pending'
-                             check (status in ('pending', 'in_progress', 'done')),
-    created_at              timestamptz not null default now(),
-    completed_at            timestamptz
+create table chart_entries (
+    entry_id        bigint generated always as identity primary key,
+    patient_id      bigint not null references patients(patient_id) on delete cascade,
+    recorded_by     bigint not null references officers(officer_id),
+    entry_type      text not null
+                     check (entry_type in ('vital_signs', 'nursing_note', 'medication', 'other', 'doctor_order')),
+    details         jsonb not null,
+    created_at      timestamptz not null default now()
 );
 
 -- ============================================
 -- 6. BILLING
+-- One cleared bill per discharge request, written by clear_billing().
 -- ============================================
 create table billing (
     billing_id              bigint generated always as identity primary key,
-    discharge_request_id    bigint not null references discharge_requests(request_id) on delete cascade,
+    discharge_request_id    bigint not null unique references discharge_requests(request_id) on delete cascade,
     patient_id              bigint not null references patients(patient_id),
     handled_by              bigint references officers(officer_id),
-    total_amount            numeric(12,2) not null default 0,
+    charges                 jsonb not null, -- itemized expenses, e.g. {"room": 1500}
+    total_amount            numeric(12,2) not null,
     philhealth_deduction    numeric(12,2) not null default 0,
-    status                  text not null default 'pending'
-                             check (status in ('pending', 'cleared')),
-    created_at               timestamptz not null default now()
+    created_at              timestamptz not null default now()
 );
 
 -- ============================================
@@ -118,10 +117,7 @@ create index idx_discharge_requests_patient_id on discharge_requests(patient_id)
 create index idx_discharge_requests_requested_by on discharge_requests(requested_by);
 create index idx_discharge_requests_approved_by on discharge_requests(approved_by);
 create index idx_discharge_requests_status on discharge_requests(status);
-create index idx_tasks_discharge_request_id on tasks(discharge_request_id);
-create index idx_tasks_assigned_to on tasks(assigned_to);
-create index idx_tasks_status on tasks(status);
-create index idx_billing_discharge_request_id on billing(discharge_request_id);
+create index idx_chart_entries_patient_id on chart_entries(patient_id);
 create index idx_billing_patient_id on billing(patient_id);
 create index idx_officers_role_duty on officers(role, duty_status);
 
@@ -135,5 +131,5 @@ alter table officers enable row level security;
 alter table credentials enable row level security;
 alter table patients enable row level security;
 alter table discharge_requests enable row level security;
-alter table tasks enable row level security;
+alter table chart_entries enable row level security;
 alter table billing enable row level security;

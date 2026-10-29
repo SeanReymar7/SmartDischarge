@@ -19,7 +19,7 @@ import type { AdminSession } from '~/composables/useAdminSession'
 
 const brandHighlights = [
   { icon: ScanText, text: 'Digitized charts & records' },
-  { icon: ClipboardCheck, text: 'Automated task delegation' },
+  { icon: ClipboardCheck, text: 'Nurse → doctor → billing discharge flow' },
   { icon: Activity, text: 'Real-time discharge tracking' },
 ]
 
@@ -199,7 +199,7 @@ async function handleSubmit() {
             One dashboard for every step of the discharge process.
           </h2>
           <p class="mt-4 max-w-sm text-base text-sidebar-foreground/80">
-            Track documentation, task delegation, and discharge status in real time —
+            Track patient charts, doctor approvals, and discharge status in real time —
             no more paper carts.
           </p>
 

@@ -37,6 +37,26 @@ drop function if exists login_administrator(text, text);
 drop function if exists login_administrator(text, text, text);
 drop function if exists register_administrator(text, text);
 
+-- Removed with the task-assignment workflow (replaced by the patient chart
+-- and the nurse -> doctor -> billing flow in ahdms_core_functions.sql).
+drop function if exists get_required_role(text);
+drop function if exists auto_assign_officer(text);
+drop function if exists complete_task(bigint);
+drop function if exists list_tasks_for_officer(bigint);
+drop function if exists list_tasks_for_officer_detailed(bigint);
+drop function if exists create_billing_record(bigint, bigint, numeric, numeric);
+drop function if exists verify_billing(bigint);
+drop function if exists complete_discharge_request(bigint);
+drop function if exists get_discharge_request_details(bigint);
+drop function if exists list_discharge_requests(text);
+drop table if exists tasks cascade;
+
+-- These two changed their return columns (billing_verified removed), which
+-- `create or replace` can't do, so drop them; ahdms_core_functions.sql
+-- recreates them.
+drop function if exists list_discharge_requests_by_requester(bigint);
+drop function if exists list_discharge_requests_detailed(text);
+
 -- Ask PostgREST to pick up the change immediately instead of waiting for
 -- its next automatic schema-cache refresh.
 select pg_notify('pgrst', 'reload schema');

@@ -1,4 +1,4 @@
-interface PatientRow {
+export interface PatientRow {
   patient_id: number
   full_name: string
   date_of_birth: string | null
@@ -19,7 +19,6 @@ interface DischargeRequestRow {
   requested_by: number
   approved_by: number | null
   status: string
-  billing_verified: boolean
   timestamp: string
 }
 
@@ -28,7 +27,6 @@ interface DischargeRequestByRequesterRow {
   patient_id: number
   patient_name: string
   status: string
-  billing_verified: boolean
   timestamp: string
 }
 
@@ -41,29 +39,28 @@ interface DischargeRequestDetailedRow {
   approved_by: number | null
   approved_by_name: string | null
   status: string
-  billing_verified: boolean
   timestamp: string
 }
 
-interface TaskRow {
-  task_id: number
-  discharge_request_id: number
-  assigned_to: number | null
-  task_type: string
-  status: string
+export type ChartEntryType = 'vital_signs' | 'nursing_note' | 'medication' | 'other' | 'doctor_order'
+
+export interface ChartEntryRow {
+  entry_id: number
+  entry_type: ChartEntryType
+  details: Record<string, string>
+  recorded_by_name: string
+  recorded_by_role: string
   created_at: string
-  completed_at: string | null
 }
 
-interface TaskDetailedRow {
-  task_id: number
-  discharge_request_id: number
-  patient_id: number
+export interface BillingRecordRow {
+  billing_id: number
   patient_name: string
-  task_type: string
-  status: string
+  handled_by_name: string | null
+  charges: Record<string, number>
+  total_amount: number
+  philhealth_deduction: number
   created_at: string
-  completed_at: string | null
 }
 
 interface OfficerRow {
@@ -79,9 +76,9 @@ export interface BillingRow {
   discharge_request_id: number
   patient_id: number
   handled_by: number | null
+  charges: Record<string, number>
   total_amount: number
   philhealth_deduction: number
-  status: string
   created_at: string
 }
 
@@ -137,25 +134,21 @@ export interface Database {
         Args: { p_patient_id: number; p_requested_by: number }
         Returns: number
       }
-      complete_task: {
-        Args: { p_task_id: number }
-        Returns: TaskRow
+      add_chart_entry: {
+        Args: { p_patient_id: number; p_recorded_by: number; p_entry_type: ChartEntryType; p_details: Record<string, string> }
+        Returns: unknown
       }
-      list_tasks_for_officer: {
-        Args: { p_officer_id: number }
-        Returns: TaskRow[]
+      list_chart_entries: {
+        Args: { p_patient_id: number }
+        Returns: ChartEntryRow[]
       }
-      list_tasks_for_officer_detailed: {
-        Args: { p_officer_id: number }
-        Returns: TaskDetailedRow[]
-      }
-      create_billing_record: {
-        Args: { p_discharge_request_id: number; p_patient_id: number; p_total_amount: number; p_philhealth_deduction: number }
+      clear_billing: {
+        Args: { p_request_id: number; p_handled_by: number; p_charges: Record<string, number>; p_philhealth_deduction: number }
         Returns: BillingRow
       }
-      verify_billing: {
-        Args: { p_billing_id: number }
-        Returns: BillingRow
+      list_billing_records: {
+        Args: Record<string, never>
+        Returns: BillingRecordRow[]
       }
       approve_discharge_request: {
         Args: { p_request_id: number; p_approved_by: number }
@@ -164,25 +157,6 @@ export interface Database {
       reject_discharge_request: {
         Args: { p_request_id: number; p_rejected_by: number }
         Returns: DischargeRequestRow
-      }
-      complete_discharge_request: {
-        Args: { p_request_id: number }
-        Returns: DischargeRequestRow
-      }
-      get_discharge_request_details: {
-        Args: { p_request_id: number }
-        Returns: {
-          request_id: number
-          status: string
-          billing_verified: boolean
-          patient_full_name: string
-          tasks_json: TaskRow[]
-          billing_json: BillingRow[]
-        }
-      }
-      list_discharge_requests: {
-        Args: { p_status?: string | null }
-        Returns: DischargeRequestRow[]
       }
       list_discharge_requests_by_requester: {
         Args: { p_officer_id: number }

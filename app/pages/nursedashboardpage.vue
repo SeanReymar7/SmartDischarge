@@ -2,8 +2,6 @@
 import {
   AlertTriangle,
   BedSingle,
-  CheckCircle2,
-  ClipboardCheck,
   DoorOpen,
   LayoutDashboard,
   LoaderCircle,
@@ -34,7 +32,6 @@ const navItems = [
   { label: 'Overview', icon: LayoutDashboard, section: 'overview' },
   { label: 'My Patients', icon: BedSingle, section: 'patients' },
   { label: 'Discharge Requests', icon: DoorOpen, section: 'discharge-requests' },
-  { label: 'My Tasks', icon: ClipboardCheck, section: 'tasks' },
 ] as const
 
 type Section = typeof navItems[number]['section']
@@ -60,24 +57,11 @@ interface DischargeRequest {
   patient_id: number
   patient_name: string
   status: string
-  billing_verified: boolean
   timestamp: string
-}
-
-interface NurseTask {
-  task_id: number
-  discharge_request_id: number
-  patient_id: number
-  patient_name: string
-  task_type: string
-  status: string
-  created_at: string
-  completed_at: string | null
 }
 
 const patients = ref<Patient[]>([])
 const dischargeRequests = ref<DischargeRequest[]>([])
-const tasks = ref<NurseTask[]>([])
 const isLoadingData = ref(false)
 const dataError = ref('')
 const searchQuery = ref('')
@@ -86,10 +70,9 @@ async function loadDashboardData() {
   isLoadingData.value = true
   const errors: string[] = []
 
-  const [patientsRes, requestsRes, tasksRes] = await Promise.all([
+  const [patientsRes, requestsRes] = await Promise.all([
     supabase.rpc('list_patients_by_officer', { p_officer_id: officerId.value }),
     supabase.rpc('list_discharge_requests_by_requester', { p_officer_id: officerId.value }),
-    supabase.rpc('list_tasks_for_officer_detailed', { p_officer_id: officerId.value }),
   ])
 
   if (patientsRes.error) errors.push(`Patients: ${patientsRes.error.message}`)
@@ -97,9 +80,6 @@ async function loadDashboardData() {
 
   if (requestsRes.error) errors.push(`Discharge requests: ${requestsRes.error.message}`)
   else dischargeRequests.value = requestsRes.data ?? []
-
-  if (tasksRes.error) errors.push(`Tasks: ${tasksRes.error.message}`)
-  else tasks.value = tasksRes.data ?? []
 
   dataError.value = errors.join(' ')
   isLoadingData.value = false
@@ -142,39 +122,19 @@ const hoveredSummary = ref<string | null>(null)
 
 const statusBarColor: Record<string, string> = {
   pending: 'var(--warning)',
-  in_progress: 'var(--info)',
   approved: 'var(--success)',
   completed: 'var(--neutral)',
   rejected: 'var(--danger)',
 }
-
-const pendingTasks = computed(() => tasks.value.filter((t) => t.status !== 'done'))
 
 // ── Overview: recent activity ───────────────────────────────────────────
 
 const recentPatients = computed(() => patients.value.slice(0, 5))
 const recentDischargeRequests = computed(() => dischargeRequests.value.slice(0, 5))
 
-// ── Tasks: complete nurse clearance ─────────────────────────────────────
+// ── Patient chart (vitals, notes, medication, other records) ────────────
 
-const completingTaskId = ref<number | null>(null)
-const taskActionError = ref('')
-
-async function completeTask(taskId: number) {
-  completingTaskId.value = taskId
-  taskActionError.value = ''
-
-  const { error } = await supabase.rpc('complete_task', { p_task_id: taskId })
-
-  if (error) {
-    taskActionError.value = error.message
-    completingTaskId.value = null
-    return
-  }
-
-  completingTaskId.value = null
-  await loadDashboardData()
-}
+const chartPatient = ref<Patient | null>(null)
 
 // ── Discharge requests: create ────────────────────────────────────────
 
@@ -345,8 +305,6 @@ async function submitPatientForm() {
       department="Nursing"
       role-label="Nurse"
       :nav-items="navItems"
-      :badges="{ tasks: pendingTasks.length }"
-      :alert="pendingTasks.length > 0"
     >
       <div v-if="dataError" class="flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2.5 text-sm text-danger">
         <AlertTriangle class="h-4 w-4 shrink-0" />
@@ -388,12 +346,6 @@ async function submitPatientForm() {
               <span class="mt-2 text-center text-xs text-muted-foreground">{{ bar.label }}</span>
             </div>
           </div>
-        </div>
-
-        <!-- Needs attention -->
-        <div v-if="pendingTasks.length > 0" class="flex items-center gap-2 rounded-md bg-warning/10 px-3 py-2.5 text-sm text-warning">
-          <AlertTriangle class="h-4 w-4 shrink-0" />
-          {{ pendingTasks.length }} nurse clearance task{{ pendingTasks.length === 1 ? '' : 's' }} still awaiting completion.
         </div>
 
         <div class="grid gap-4 lg:grid-cols-2">
@@ -477,9 +429,14 @@ async function submitPatientForm() {
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.philhealth_no ?? '—' }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.discharge_date ?? '—' }}</td>
                 <td class="py-2 text-right">
-                  <button type="button" class="text-xs font-medium text-primary hover:underline" @click="openEditPatientForm(patient)">
-                    Edit
-                  </button>
+                  <div class="flex justify-end gap-3">
+                    <button type="button" class="text-xs font-medium text-primary hover:underline" @click="chartPatient = patient">
+                      Chart
+                    </button>
+                    <button type="button" class="text-xs font-medium text-primary hover:underline" @click="openEditPatientForm(patient)">
+                      Edit
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="!isLoadingData && filteredPatients.length === 0">
@@ -497,7 +454,7 @@ async function submitPatientForm() {
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 class="text-base font-bold tracking-tight">Discharge Requests</h2>
-            <p class="text-xs text-muted-foreground">Requests you've submitted</p>
+            <p class="text-xs text-muted-foreground">Patient records you've submitted for the doctor's approval</p>
           </div>
           <button
             type="button"
@@ -514,7 +471,7 @@ async function submitPatientForm() {
             <thead>
               <tr class="border-b border-border text-left text-xs text-muted-foreground">
                 <th class="pb-2 pr-4 font-medium">Patient</th>
-                <th class="pb-2 pr-4 font-medium">Billing Verified</th>
+                <th class="pb-2 pr-4 font-medium">Billed</th>
                 <th class="pb-2 pr-4 font-medium">Submitted</th>
                 <th class="pb-2 font-medium">Status</th>
               </tr>
@@ -522,7 +479,7 @@ async function submitPatientForm() {
             <tbody class="divide-y divide-border">
               <tr v-for="request in dischargeRequests" :key="request.request_id">
                 <td class="py-2 pr-4 font-medium">{{ request.patient_name }}</td>
-                <td class="py-2 pr-4 text-muted-foreground">{{ request.billing_verified ? 'Yes' : 'No' }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ request.status === 'completed' ? 'Yes' : 'No' }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ new Date(request.timestamp).toLocaleString() }}</td>
                 <td class="py-2">
                   <span
@@ -542,59 +499,15 @@ async function submitPatientForm() {
         </div>
       </div>
 
-      <!-- Tasks -->
-      <div v-if="activeSection === 'tasks'" class="rounded-xl border border-border bg-card p-5">
-        <h2 class="text-base font-bold tracking-tight">Nurse Clearance Tasks</h2>
-        <p class="text-xs text-muted-foreground">Auto-assigned when a discharge request is filed</p>
-
-        <div v-if="taskActionError" class="mt-4 flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2.5 text-sm text-danger">
-          <AlertTriangle class="h-4 w-4 shrink-0" />
-          {{ taskActionError }}
-        </div>
-
-        <div class="mt-4 overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-border text-left text-xs text-muted-foreground">
-                <th class="pb-2 pr-4 font-medium">Patient</th>
-                <th class="pb-2 pr-4 font-medium">Assigned</th>
-                <th class="pb-2 pr-4 font-medium">Status</th>
-                <th class="pb-2 font-medium" />
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-border">
-              <tr v-for="task in tasks" :key="task.task_id">
-                <td class="py-2 pr-4 font-medium">{{ task.patient_name }}</td>
-                <td class="py-2 pr-4 text-muted-foreground">{{ new Date(task.created_at).toLocaleString() }}</td>
-                <td class="py-2 pr-4">
-                  <span
-                    class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium"
-                    :class="task.status === 'done' ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'"
-                  >
-                    <CheckCircle2 v-if="task.status === 'done'" class="h-3.5 w-3.5" />
-                    {{ task.status === 'done' ? 'Done' : 'Pending' }}
-                  </span>
-                </td>
-                <td class="py-2 text-right">
-                  <button
-                    v-if="task.status !== 'done'"
-                    type="button"
-                    :disabled="completingTaskId === task.task_id"
-                    class="text-xs font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-60"
-                    @click="completeTask(task.task_id)"
-                  >
-                    {{ completingTaskId === task.task_id ? 'Completing…' : 'Mark Complete' }}
-                  </button>
-                </td>
-              </tr>
-              <tr v-if="!isLoadingData && tasks.length === 0">
-                <td colspan="4" class="py-6 text-center text-sm text-muted-foreground">No tasks assigned yet.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
     </DashboardShell>
+
+    <PatientChart
+      v-if="chartPatient"
+      :patient="chartPatient"
+      :officer-id="officerId"
+      :can-add="['vital_signs', 'nursing_note', 'medication', 'other']"
+      @close="chartPatient = null"
+    />
 
     <!-- Add / edit patient modal -->
     <div v-if="showPatientForm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -726,7 +639,7 @@ async function submitPatientForm() {
       <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
         <h2 class="text-base font-semibold tracking-tight">New Discharge Request</h2>
         <p class="mt-1 text-xs text-muted-foreground">
-          Filing this auto-assigns nurse, doctor, billing, and PhilHealth tasks to on-duty staff.
+          Submits the patient's chart to the doctor. Once the doctor approves, billing computes the expenses.
         </p>
 
         <form class="mt-4 space-y-4" @submit.prevent="confirmNewRequest">

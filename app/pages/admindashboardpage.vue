@@ -134,13 +134,11 @@ interface DischargeRequest {
   requested_by_name: string
   approved_by_name: string | null
   status: string
-  billing_verified: boolean
   timestamp: string
 }
 
 const requestStatusColor: Record<string, string> = {
   pending: 'var(--warning)',
-  in_progress: 'var(--info)',
   approved: 'var(--success)',
   completed: 'var(--neutral)',
   rejected: 'var(--danger)',
@@ -244,19 +242,18 @@ const statTiles = computed(() => [
   { icon: BedSingle, tone: 'bg-info/10 text-info', label: 'Patients in Queue', value: String(patientsInQueue.value) },
   { icon: UserRoundCheck, tone: 'bg-primary/10 text-primary', label: 'Staff on Duty', value: `${onDutyCount.value} of ${officers.value.length}` },
   { icon: DoorOpen, tone: 'bg-success/10 text-success', label: 'Completed Discharges', value: String(dischargeRequests.value.filter((r) => r.status === 'completed').length) },
-  { icon: ReceiptText, tone: 'bg-warning/10 text-warning', label: 'Awaiting Billing', value: String(dischargeRequests.value.filter((r) => !r.billing_verified && r.status !== 'rejected' && r.status !== 'completed').length) },
+  { icon: ReceiptText, tone: 'bg-warning/10 text-warning', label: 'Awaiting Billing', value: String(dischargeRequests.value.filter((r) => r.status === 'approved').length) },
 ])
 
 const dischargeStatusIcon: Record<string, typeof Clock> = {
   pending: Clock,
-  in_progress: Clock,
   approved: CheckCircle2,
   rejected: XCircle,
   completed: Circle,
 }
 
 const dischargeStatus = computed(() => {
-  const order = ['pending', 'in_progress', 'approved', 'completed', 'rejected']
+  const order = ['pending', 'approved', 'completed', 'rejected']
   return order.map((label) => ({
     label,
     count: dischargeRequests.value.filter((r) => r.status === label).length,
