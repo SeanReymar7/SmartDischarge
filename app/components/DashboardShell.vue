@@ -56,9 +56,7 @@ async function handleLogout() {
       :class="sidebarOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'"
     >
       <div class="flex h-16 shrink-0 items-center gap-3 px-5">
-        <span class="flex h-9 w-9 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-          <AppLogo class="h-5 w-5" />
-        </span>
+        <AppLogo class="h-8 w-8 shrink-0 text-sidebar-primary" />
         <div class="min-w-0 flex-1 leading-tight">
           <p class="font-bold tracking-tight text-sidebar-accent-foreground">AHDMS</p>
           <p class="truncate text-xs text-sidebar-foreground/60">Butuan Medical Center</p>
@@ -89,7 +87,7 @@ async function handleLogout() {
             v-if="activeSection === item.section"
             class="absolute inset-y-2 left-0 w-0.5 rounded-full bg-sidebar-primary"
           />
-          <component :is="item.icon" class="h-4 w-4 shrink-0" />
+          <component :is="item.icon" class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
           {{ item.label }}
           <span
             v-if="badges?.[item.section]"

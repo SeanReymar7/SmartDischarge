@@ -142,7 +142,7 @@ async function submitBilling() {
   isSavingBilling.value = true
   billingFormError.value = ''
 
-  const { error } = await supabase.rpc('clear_billing', {
+  const { data, error } = await supabase.rpc('clear_billing', {
     p_request_id: billingRequest.value.request_id,
     p_handled_by: officerId.value,
     p_charges: parsed,
@@ -157,11 +157,41 @@ async function submitBilling() {
 
   billingRequest.value = null
   await loadDashboardData()
+  activeSection.value = 'billed'
+  receiptRecord.value = billingRecords.value.find((r) => r.billing_id === data?.billing_id) ?? null
 }
 
 function chargeLabel(key: string) {
   return CHARGE_FIELDS.find((f) => f.key === key)?.label ?? key
 }
+
+// ── Discharge receipt ───────────────────────────────────────────────────
+
+const receiptRecord = ref<BillingRecordRow | null>(null)
+
+function receiptNumber(billingId: number) {
+  return String(billingId).padStart(6, '0')
+}
+
+const longDate = new Intl.DateTimeFormat('en-PH', { dateStyle: 'long' })
+
+function receiptDate(value: string | null) {
+  if (!value) return '—'
+  return longDate.format(new Date(value.length === 10 ? `${value}T00:00:00` : value))
+}
+
+const receiptRows = computed(() => {
+  const record = receiptRecord.value
+  if (!record) return []
+  return [
+    { label: 'Patient', value: record.patient_name },
+    { label: 'PhilHealth No.', value: record.philhealth_no ?? '—' },
+    { label: 'Room', value: record.room_number ?? '—' },
+    { label: 'Admitted', value: receiptDate(record.admission_date) },
+    { label: 'Discharged', value: receiptDate(record.discharge_date) },
+    { label: 'Billed by', value: record.handled_by_name ?? '—' },
+  ]
+})
 </script>
 
 <template>
@@ -237,7 +267,8 @@ function chargeLabel(key: string) {
                 <th class="pb-2 pr-4 text-right font-medium">Total</th>
                 <th class="pb-2 pr-4 text-right font-medium">PhilHealth</th>
                 <th class="pb-2 pr-4 text-right font-medium">Net Payable</th>
-                <th class="pb-2 font-medium">Billed</th>
+                <th class="pb-2 pr-4 font-medium">Billed</th>
+                <th class="pb-2 font-medium" />
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
@@ -249,13 +280,18 @@ function chargeLabel(key: string) {
                 <td class="py-2 pr-4 text-right tabular-nums">{{ peso.format(record.total_amount) }}</td>
                 <td class="py-2 pr-4 text-right tabular-nums text-muted-foreground">−{{ peso.format(record.philhealth_deduction) }}</td>
                 <td class="py-2 pr-4 text-right font-medium tabular-nums">{{ peso.format(record.total_amount - record.philhealth_deduction) }}</td>
-                <td class="py-2 text-muted-foreground">
+                <td class="py-2 pr-4 text-muted-foreground">
                   {{ new Date(record.created_at).toLocaleDateString() }}
                   <span class="block text-xs">{{ record.handled_by_name ?? '—' }}</span>
                 </td>
+                <td class="py-2 text-right">
+                  <button type="button" class="text-xs font-medium text-primary hover:underline" @click="receiptRecord = record">
+                    Receipt
+                  </button>
+                </td>
               </tr>
               <tr v-if="!isLoadingData && filteredRecords.length === 0">
-                <td colspan="6" class="py-6 text-center text-sm text-muted-foreground">No bills yet.</td>
+                <td colspan="7" class="py-6 text-center text-sm text-muted-foreground">No bills yet.</td>
               </tr>
             </tbody>
           </table>
@@ -272,76 +308,144 @@ function chargeLabel(key: string) {
     />
 
     <!-- Compute bill modal -->
-    <div v-if="billingRequest" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isSavingBilling && (billingRequest = null)" />
-      <div class="relative flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
-        <h2 class="shrink-0 text-base font-semibold tracking-tight">Compute Bill</h2>
-        <p class="mt-1 shrink-0 text-xs text-muted-foreground">
-          For <span class="font-medium text-foreground">{{ billingRequest.patient_name }}</span>. Clearing the bill completes the discharge.
-        </p>
-
-        <form class="mt-4 flex min-h-0 flex-1 flex-col" @submit.prevent="submitBilling">
-          <div class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-            <div v-for="field in CHARGE_FIELDS" :key="field.key" class="space-y-1.5">
-              <label :for="`charge-${field.key}`" class="text-sm font-medium">{{ field.label }} (₱)</label>
-              <input
-                :id="`charge-${field.key}`"
-                v-model="charges[field.key]"
-                type="number"
-                min="0"
-                step="0.01"
-                class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-            </div>
-            <div class="space-y-1.5">
-              <label for="billing-philhealth" class="text-sm font-medium">PhilHealth deduction (₱)</label>
-              <input
-                id="billing-philhealth"
-                v-model="philhealthDeduction"
-                type="number"
-                min="0"
-                step="0.01"
-                class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-            </div>
-
-            <dl class="space-y-1.5 rounded-md bg-muted px-3 py-2.5 text-sm">
-              <div class="flex justify-between">
-                <dt class="text-muted-foreground">Total amount</dt>
-                <dd class="tabular-nums">{{ peso.format(totalAmount) }}</dd>
+    <FormModal
+      v-if="billingRequest"
+      title="Compute Bill"
+      :subtitle="`For ${billingRequest.patient_name}. Clearing the bill completes the discharge.`"
+      :icon="ReceiptText"
+      size="lg"
+      :busy="isSavingBilling"
+      @close="billingRequest = null"
+    >
+      <form class="modal-form" @submit.prevent="submitBilling">
+        <div class="modal-body">
+          <section>
+            <h3 class="field-group-title">Charges</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div v-for="field in CHARGE_FIELDS" :key="field.key" class="field">
+                <label :for="`charge-${field.key}`" class="field-label">{{ field.label }} (₱)</label>
+                <input :id="`charge-${field.key}`" v-model="charges[field.key]" type="number" min="0" step="0.01" class="field-input tabular-nums">
               </div>
-              <div class="flex justify-between font-semibold">
-                <dt>Net payable</dt>
-                <dd class="tabular-nums">{{ peso.format(netPayable) }}</dd>
-              </div>
-            </dl>
+            </div>
+          </section>
+
+          <div class="field">
+            <label for="billing-philhealth" class="field-label">PhilHealth deduction (₱)</label>
+            <input id="billing-philhealth" v-model="philhealthDeduction" type="number" min="0" step="0.01" class="field-input tabular-nums">
           </div>
 
-          <div v-if="billingFormError" class="mt-4 flex shrink-0 items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">
+          <dl class="rounded-md bg-sidebar px-4 py-3 text-sm text-sidebar-foreground">
+            <div class="flex justify-between">
+              <dt>Total amount</dt>
+              <dd class="tabular-nums">{{ peso.format(totalAmount) }}</dd>
+            </div>
+            <div class="mt-1 flex items-baseline justify-between text-sidebar-accent-foreground">
+              <dt class="font-semibold">Net payable</dt>
+              <dd class="text-xl font-bold tracking-tight tabular-nums">{{ peso.format(netPayable) }}</dd>
+            </div>
+          </dl>
+
+          <div v-if="billingFormError" class="form-error">
             <AlertTriangle class="h-4 w-4 shrink-0" />
             {{ billingFormError }}
           </div>
+        </div>
 
-          <div class="mt-4 flex shrink-0 gap-3">
-            <button
-              type="button"
-              :disabled="isSavingBilling"
-              class="flex-1 rounded-md border border-border py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              @click="billingRequest = null"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              :disabled="isSavingBilling"
-              class="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <LoaderCircle v-if="isSavingBilling" class="h-4 w-4 animate-spin" />
-              {{ isSavingBilling ? 'Saving…' : 'Clear Bill & Discharge' }}
-            </button>
+        <div class="modal-footer">
+          <button type="button" :disabled="isSavingBilling" class="btn-secondary" @click="billingRequest = null">
+            Cancel
+          </button>
+          <button type="submit" :disabled="isSavingBilling" class="btn-primary">
+            <LoaderCircle v-if="isSavingBilling" class="h-4 w-4 animate-spin" />
+            {{ isSavingBilling ? 'Saving…' : 'Clear Bill & Discharge' }}
+          </button>
+        </div>
+      </form>
+    </FormModal>
+
+    <!-- Discharge receipt -->
+    <PrintPreview v-if="receiptRecord" label="Discharge receipt" @close="receiptRecord = null">
+      <!-- Black rules only, so it prints the same on any office printer -->
+      <header class="flex items-start justify-between gap-6 border-b-2 border-black pb-4">
+        <div class="flex items-center gap-3">
+          <AppLogo class="h-11 w-11 shrink-0" />
+          <div class="leading-tight">
+            <p class="text-xl font-bold tracking-tight">Butuan Medical Center</p>
+            <p class="text-xs">Km. 5, Baan, Butuan City</p>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <div class="text-right leading-tight">
+          <h1 class="text-sm font-bold">Discharge Billing Receipt</h1>
+          <p class="mt-1 text-xl font-bold tabular-nums">No. {{ receiptNumber(receiptRecord.billing_id) }}</p>
+          <p class="text-xs">{{ receiptDate(receiptRecord.created_at) }}</p>
+        </div>
+      </header>
+
+      <dl class="mt-5 grid grid-cols-2 gap-x-10 gap-y-2 text-sm">
+        <div v-for="row in receiptRows" :key="row.label" class="flex justify-between gap-4">
+          <dt class="text-black/70">{{ row.label }}</dt>
+          <dd class="text-right font-semibold">{{ row.value }}</dd>
+        </div>
+      </dl>
+
+      <table class="mt-8 w-full text-sm">
+        <thead>
+          <tr class="border-b border-black text-left">
+            <th class="pb-1.5 font-semibold">Charge</th>
+            <th class="pb-1.5 text-right font-semibold">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(amount, key) in receiptRecord.charges" :key="key" class="border-b border-black/15">
+            <td class="py-2">{{ chargeLabel(String(key)) }}</td>
+            <td class="py-2 text-right tabular-nums">{{ peso.format(amount) }}</td>
+          </tr>
+          <tr v-if="Object.keys(receiptRecord.charges).length === 0" class="border-b border-black/15">
+            <td colspan="2" class="py-2">No charges recorded.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Accounting convention: a double rule closes the final amount -->
+      <dl class="ml-auto mt-4 w-72 text-sm">
+        <div class="flex justify-between py-1">
+          <dt>Total amount</dt>
+          <dd class="tabular-nums">{{ peso.format(receiptRecord.total_amount) }}</dd>
+        </div>
+        <div class="flex justify-between py-1">
+          <dt>PhilHealth deduction</dt>
+          <dd class="tabular-nums">−{{ peso.format(receiptRecord.philhealth_deduction) }}</dd>
+        </div>
+        <div class="mt-1 flex items-baseline justify-between border-t border-b-4 border-t-black border-b-black py-2 [border-bottom-style:double]">
+          <dt class="font-bold">Net payable</dt>
+          <dd class="text-2xl font-bold tracking-tight tabular-nums">{{ peso.format(receiptRecord.total_amount - receiptRecord.philhealth_deduction) }}</dd>
+        </div>
+      </dl>
+
+      <footer class="ml-auto mt-14 w-72 break-inside-avoid text-center text-sm">
+        <p class="border-b border-black pb-1 font-semibold">{{ receiptRecord.handled_by_name ?? '' }}</p>
+        <p class="mt-1 text-xs">Billing officer's signature over printed name</p>
+      </footer>
+
+      <p class="mt-6 text-xs text-black/70">This is a billing statement. It does not replace the official receipt from the Cashier.</p>
+
+      <!-- Tear-off stub the hospital keeps -->
+      <section class="mt-8 break-inside-avoid border-t-2 border-dashed border-black pt-4 text-sm">
+        <div class="flex items-baseline justify-between gap-4">
+          <h2 class="font-bold">Hospital copy</h2>
+          <p class="font-bold tabular-nums">No. {{ receiptNumber(receiptRecord.billing_id) }}</p>
+        </div>
+        <div class="mt-3 flex items-end justify-between gap-10">
+          <div class="min-w-0">
+            <p class="truncate font-semibold">{{ receiptRecord.patient_name }}</p>
+            <p class="text-xs">Net payable {{ peso.format(receiptRecord.total_amount - receiptRecord.philhealth_deduction) }}</p>
+          </div>
+          <div class="w-64 shrink-0 text-center">
+            <p class="border-b border-black pb-5" />
+            <p class="mt-1 text-xs">Received by patient or representative</p>
+          </div>
+        </div>
+      </section>
+    </PrintPreview>
   </div>
 </template>

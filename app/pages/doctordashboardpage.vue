@@ -8,11 +8,10 @@ import {
   DoorOpen,
   LayoutDashboard,
   LoaderCircle,
-  Signature,
   TrendingUp,
   XCircle,
 } from '@lucide/vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 definePageMeta({
   middleware: 'auth',
@@ -63,6 +62,7 @@ interface DischargeRequest {
   patient_id: number
   patient_name: string
   requested_by_name: string
+  assigned_doctor_id: number | null
   approved_by_name: string | null
   status: string
   timestamp: string
@@ -93,7 +93,8 @@ async function loadDashboardData() {
   else patients.value = patientsRes.data ?? []
 
   if (requestsRes.error) errors.push(`Discharge requests: ${requestsRes.error.message}`)
-  else dischargeRequests.value = requestsRes.data ?? []
+  // Only requests sent to this doctor, plus older ones with no doctor assigned.
+  else dischargeRequests.value = (requestsRes.data ?? []).filter((r) => r.assigned_doctor_id === null || r.assigned_doctor_id === doctorId.value)
 
   dataError.value = errors.join(' ')
   isLoadingData.value = false
@@ -103,15 +104,33 @@ onMounted(loadDashboardData)
 
 const pendingRequests = computed(() => dischargeRequests.value.filter((r) => r.status === 'pending'))
 
-// ── Overview stats ───────────────────────────────────────────────────
+// ── Overview: review queue, longest wait first ───────────────────────
 
-const statTiles = computed(() => {
-  const approved = dischargeRequests.value.filter((r) => r.status === 'approved').length
-  return [
-    { icon: Signature, tone: 'bg-warning/10 text-warning', label: 'Awaiting Approval', value: String(pendingRequests.value.length) },
-    { icon: CheckCircle2, tone: 'bg-success/10 text-success', label: 'Approved', value: String(approved) },
-    { icon: DoorOpen, tone: 'bg-primary/10 text-primary', label: 'Total Requests', value: String(dischargeRequests.value.length) },
-  ]
+const reviewQueue = computed(() => [...pendingRequests.value].sort((a, b) => a.timestamp.localeCompare(b.timestamp)))
+
+// Keeps the waiting times current while the dashboard stays open.
+const now = ref(Date.now())
+let clock: ReturnType<typeof setInterval> | undefined
+onMounted(() => { clock = setInterval(() => { now.value = Date.now() }, 60_000) })
+onUnmounted(() => clearInterval(clock))
+
+function waitingTime(timestamp: string) {
+  const minutes = Math.max(0, Math.floor((now.value - new Date(timestamp).getTime()) / 60_000))
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hr`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days === 1 ? '' : 's'}`
+}
+
+function patientRoom(patientId: number) {
+  return patients.value.find((p) => p.patient_id === patientId)?.room_number ?? '—'
+}
+
+const reviewHeadline = computed(() => {
+  const waiting = reviewQueue.value.length
+  if (waiting === 0) return 'No discharges are waiting for you.'
+  return `${waiting} discharge${waiting === 1 ? ' is' : 's are'} waiting for your decision.`
 })
 
 const dischargeStatusIcon: Record<string, typeof Clock> = {
@@ -260,20 +279,49 @@ function viewPatientById(patientId: number) {
       </div>
 
       <template v-if="activeSection === 'overview'">
-      <!-- Stat tiles -->
-      <div class="grid gap-4 sm:grid-cols-3">
-        <div
-          v-for="tile in statTiles"
-          :key="tile.label"
-          class="rounded-xl border border-border bg-card p-5"
-        >
-          <span class="flex h-9 w-9 items-center justify-center rounded-md" :class="tile.tone">
-            <component :is="tile.icon" class="h-4.5 w-4.5" />
-          </span>
-          <p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">{{ tile.value }}</p>
-          <p class="mt-1 text-sm text-muted-foreground">{{ tile.label }}</p>
-        </div>
+      <div class="max-w-2xl">
+        <p class="text-2xl font-bold tracking-tight sm:text-3xl">{{ reviewHeadline }}</p>
+        <p v-if="reviewQueue.length > 0" class="mt-1 text-sm text-muted-foreground">
+          The longest has waited {{ waitingTime(reviewQueue[0]!.timestamp) }}.
+        </p>
       </div>
+
+      <!-- Review queue: approve and reject stay inside the chart -->
+      <section class="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="review-queue-title">
+        <div class="border-b border-border px-5 py-4">
+          <h2 id="review-queue-title" class="text-base font-bold tracking-tight">Review queue</h2>
+          <p class="text-xs text-muted-foreground">Longest wait first</p>
+        </div>
+
+        <ol v-if="reviewQueue.length > 0" class="divide-y divide-border">
+          <li
+            v-for="request in reviewQueue"
+            :key="request.request_id"
+            class="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-4"
+          >
+            <span class="w-20 shrink-0">
+              <span class="block text-xs text-muted-foreground">Waiting</span>
+              <span class="block text-xl font-bold tracking-tight tabular-nums text-warning">{{ waitingTime(request.timestamp) }}</span>
+            </span>
+            <span class="min-w-40 flex-1">
+              <span class="block truncate font-semibold">{{ request.patient_name }}</span>
+              <span class="block truncate text-xs text-muted-foreground">
+                Room {{ patientRoom(request.patient_id) }}, sent by {{ request.requested_by_name }}
+              </span>
+            </span>
+            <button
+              type="button"
+              class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              @click="viewPatientById(request.patient_id)"
+            >
+              Review Chart
+            </button>
+          </li>
+        </ol>
+        <p v-else-if="!isLoadingData" class="px-5 py-10 text-center text-sm text-muted-foreground">
+          New requests from nurses appear here.
+        </p>
+      </section>
 
       <div class="grid items-stretch gap-4 xl:grid-cols-3">
         <!-- Weekly discharge trend -->
@@ -343,7 +391,7 @@ function viewPatientById(patientId: number) {
         <!-- Discharge status breakdown -->
         <div class="rounded-xl border border-border bg-card p-5">
           <h2 class="text-base font-bold tracking-tight">Discharge Status</h2>
-          <p class="text-xs text-muted-foreground">{{ statusTotal }} discharge request{{ statusTotal === 1 ? '' : 's' }}, hospital-wide</p>
+          <p class="text-xs text-muted-foreground">{{ statusTotal }} discharge request{{ statusTotal === 1 ? '' : 's' }} sent to you</p>
 
           <div v-if="statusTotal === 0" class="flex h-24 items-center justify-center text-sm text-muted-foreground">
             No discharge requests yet.
@@ -393,7 +441,7 @@ function viewPatientById(patientId: number) {
           <div>
             <h2 class="text-base font-bold tracking-tight">Discharge Requests</h2>
             <p class="text-xs text-muted-foreground">
-              Review the nurse's chart, see the patient personally if needed, then approve or reject
+              Requests sent to you. Review the nurse's chart, see the patient personally if needed, then approve or reject
             </p>
           </div>
         </div>
@@ -439,7 +487,7 @@ function viewPatientById(patientId: number) {
                 </td>
               </tr>
               <tr v-if="!isLoadingData && dischargeRequests.length === 0">
-                <td colspan="5" class="py-6 text-center text-sm text-muted-foreground">No discharge requests yet.</td>
+                <td colspan="5" class="py-6 text-center text-sm text-muted-foreground">No discharge requests sent to you yet.</td>
               </tr>
             </tbody>
           </table>
@@ -473,7 +521,7 @@ function viewPatientById(patientId: number) {
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.admission_date }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.room_number ?? '—' }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.philhealth_no ?? '—' }}</td>
-                <td class="py-2 pr-4 text-muted-foreground">{{ patient.discharge_date ?? '—' }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ patient.discharge_date ? new Date(patient.discharge_date).toLocaleDateString() : '—' }}</td>
                 <td class="py-2 text-right">
                   <button type="button" class="text-xs font-medium text-primary hover:underline" @click="chartPatient = patient">
                     Chart
@@ -520,13 +568,8 @@ function viewPatientById(patientId: number) {
     <div v-if="pendingAction" class="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isProcessingAction && (pendingAction = null)" />
       <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
-        <span
-          class="flex h-10 w-10 items-center justify-center rounded-full"
-          :class="pendingAction.kind === 'reject' ? 'bg-danger/10' : 'bg-success/10'"
-        >
-          <XCircle v-if="pendingAction.kind === 'reject'" class="h-5 w-5 text-danger" />
-          <CheckCircle2 v-else class="h-5 w-5 text-success" />
-        </span>
+        <XCircle v-if="pendingAction.kind === 'reject'" class="h-7 w-7 text-danger" :stroke-width="1.75" aria-hidden="true" />
+        <CheckCircle2 v-else class="h-7 w-7 text-success" :stroke-width="1.75" aria-hidden="true" />
         <h2 class="mt-4 text-base font-semibold tracking-tight">
           <template v-if="pendingAction.kind === 'approve'">Approve discharge request?</template>
           <template v-else>Reject discharge request?</template>

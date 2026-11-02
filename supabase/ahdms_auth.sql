@@ -41,13 +41,22 @@ $$;
 -- database, no admin exists yet), the check on p_admin_id is skipped so
 -- the very first account can be created. After that, every call must
 -- pass a p_admin_id belonging to an existing admin.
+--
+-- Doctors must have a specialty and license number; other roles never
+-- store them.
+
+-- Signature changed; the old ones would stay behind as ambiguous overloads.
+drop function if exists register_officer(text, text, text, text, bigint);
+drop function if exists register_officer(text, text, text, text, bigint, text);
 
 create or replace function register_officer(
     p_email      text,
     p_password   text,
     p_full_name  text,
     p_role       text,
-    p_admin_id   bigint default null
+    p_admin_id   bigint default null,
+    p_specialty  text default null,
+    p_license_number text default null
 )
 returns table (
     officer_id   bigint,
@@ -68,6 +77,14 @@ begin
         raise exception 'Invalid role: %', p_role;
     end if;
 
+    if p_role = 'doctor' and coalesce(trim(p_specialty), '') = '' then
+        raise exception 'Choose a field for this doctor';
+    end if;
+
+    if p_role = 'doctor' and coalesce(trim(p_license_number), '') = '' then
+        raise exception 'Enter this doctor''s license number';
+    end if;
+
     select not exists (select 1 from officers) into v_is_bootstrap;
 
     if not v_is_bootstrap and not exists (
@@ -80,8 +97,13 @@ begin
         raise exception 'Email already registered';
     end if;
 
-    insert into officers (full_name, role)
-    values (p_full_name, p_role)
+    insert into officers (full_name, role, specialty, license_number)
+    values (
+        p_full_name,
+        p_role,
+        case when p_role = 'doctor' then trim(p_specialty) end,
+        case when p_role = 'doctor' then trim(p_license_number) end
+    )
     returning officers.officer_id into v_officer_id;
 
     insert into credentials (officer_id, email, password)
@@ -98,7 +120,7 @@ $$;
 -- ── grants ────────────────────────────────────────────────────────────
 
 revoke all on function login_officer(text, text) from public;
-revoke all on function register_officer(text, text, text, text, bigint) from public;
+revoke all on function register_officer(text, text, text, text, bigint, text, text) from public;
 
 grant execute on function login_officer(text, text) to anon;
-grant execute on function register_officer(text, text, text, text, bigint) to anon;
+grant execute on function register_officer(text, text, text, text, bigint, text, text) to anon;

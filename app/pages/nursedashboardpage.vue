@@ -2,10 +2,12 @@
 import {
   AlertTriangle,
   BedSingle,
+  Check,
   DoorOpen,
   LayoutDashboard,
   LoaderCircle,
   Search,
+  UserRoundPlus,
 } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 
@@ -43,6 +45,8 @@ interface Patient {
   full_name: string
   date_of_birth: string | null
   age: number | null
+  sex: string | null
+  address: string | null
   contact_number: string | null
   emergency_contact: string | null
   admission_date: string
@@ -56,12 +60,21 @@ interface DischargeRequest {
   request_id: number
   patient_id: number
   patient_name: string
+  assigned_doctor_name: string | null
   status: string
   timestamp: string
 }
 
+interface Doctor {
+  officer_id: number
+  full_name: string
+  specialty: string | null
+  duty_status: string
+}
+
 const patients = ref<Patient[]>([])
 const dischargeRequests = ref<DischargeRequest[]>([])
+const doctors = ref<Doctor[]>([])
 const isLoadingData = ref(false)
 const dataError = ref('')
 const searchQuery = ref('')
@@ -70,9 +83,10 @@ async function loadDashboardData() {
   isLoadingData.value = true
   const errors: string[] = []
 
-  const [patientsRes, requestsRes] = await Promise.all([
+  const [patientsRes, requestsRes, officersRes] = await Promise.all([
     supabase.rpc('list_patients_by_officer', { p_officer_id: officerId.value }),
     supabase.rpc('list_discharge_requests_by_requester', { p_officer_id: officerId.value }),
+    supabase.rpc('list_officers'),
   ])
 
   if (patientsRes.error) errors.push(`Patients: ${patientsRes.error.message}`)
@@ -80,6 +94,9 @@ async function loadDashboardData() {
 
   if (requestsRes.error) errors.push(`Discharge requests: ${requestsRes.error.message}`)
   else dischargeRequests.value = requestsRes.data ?? []
+
+  if (officersRes.error) errors.push(`Doctors: ${officersRes.error.message}`)
+  else doctors.value = (officersRes.data ?? []).filter((o) => o.role === 'doctor')
 
   dataError.value = errors.join(' ')
   isLoadingData.value = false
@@ -98,28 +115,6 @@ const filteredPatients = computed(() => {
   })
 })
 
-// ── Overview: patient / discharge summary (bar chart) ───────────────────
-
-const summaryBarColor: Record<string, string> = {
-  'Total Patients': 'var(--info)',
-  'Currently Admitted': 'var(--chart-4)',
-  'Discharged': 'var(--success)',
-  'Discharge Requests': 'var(--warning)',
-}
-
-const summaryChartData = computed(() => {
-  const counts = [
-    { label: 'Total Patients', count: patients.value.length },
-    { label: 'Currently Admitted', count: patients.value.filter((p) => !p.discharge_date).length },
-    { label: 'Discharged', count: patients.value.filter((p) => p.discharge_date).length },
-    { label: 'Discharge Requests', count: dischargeRequests.value.length },
-  ].map((c) => ({ ...c, color: summaryBarColor[c.label] }))
-  const max = Math.max(1, ...counts.map((c) => c.count))
-  return counts.map((c) => ({ ...c, heightPct: (c.count / max) * 100 }))
-})
-
-const hoveredSummary = ref<string | null>(null)
-
 const statusBarColor: Record<string, string> = {
   pending: 'var(--warning)',
   approved: 'var(--success)',
@@ -127,9 +122,52 @@ const statusBarColor: Record<string, string> = {
   rejected: 'var(--danger)',
 }
 
-// ── Overview: recent activity ───────────────────────────────────────────
+// ── Overview: ward board ────────────────────────────────────────────────
 
-const recentPatients = computed(() => patients.value.slice(0, 5))
+const DISCHARGE_STEPS = ['In care', 'Doctor review', 'Billing', 'Discharged']
+
+const STAGE: Record<string, { step: number, label: string, color: string }> = {
+  none: { step: 0, label: 'In care', color: 'var(--primary)' },
+  rejected: { step: 0, label: 'Doctor rejected the request', color: 'var(--danger)' },
+  pending: { step: 1, label: 'Waiting for doctor', color: 'var(--warning)' },
+  approved: { step: 2, label: 'With billing', color: 'var(--success)' },
+}
+
+// Requests arrive newest first, so the first one found is the latest.
+function patientStage(patientId: number) {
+  const latest = dischargeRequests.value.find((r) => r.patient_id === patientId)
+  return STAGE[latest?.status ?? 'none'] ?? STAGE.none!
+}
+
+function dayOfStay(admissionDate: string) {
+  const days = Math.floor((Date.now() - new Date(`${admissionDate}T00:00:00`).getTime()) / 86_400_000)
+  return Math.max(days, 0) + 1
+}
+
+const wardBoard = computed(() => filteredPatients.value
+  .filter((p) => !p.discharge_date)
+  .sort((a, b) => (a.room_number ?? Infinity) - (b.room_number ?? Infinity))
+  .map((patient) => ({
+    patient,
+    stage: patientStage(patient.patient_id),
+    day: dayOfStay(patient.admission_date),
+  })))
+
+const wardHeadline = computed(() => {
+  const admitted = patients.value.filter((p) => !p.discharge_date).length
+  if (admitted === 0) return 'You have no patients admitted.'
+  return `You have ${admitted} patient${admitted === 1 ? '' : 's'} in your care.`
+})
+
+const wardDetail = computed(() => {
+  const count = (label: string) => patients.value.filter((p) => !p.discharge_date && patientStage(p.patient_id).label === label).length
+  return [
+    { n: count(STAGE.pending!.label), text: 'waiting for a doctor' },
+    { n: count(STAGE.approved!.label), text: 'with billing' },
+    { n: count(STAGE.rejected!.label), text: 'rejected by a doctor' },
+  ].filter((part) => part.n > 0).map((part) => `${part.n} ${part.text}`).join(', ')
+})
+
 const recentDischargeRequests = computed(() => dischargeRequests.value.slice(0, 5))
 
 // ── Patient chart (vitals, notes, medication, other records) ────────────
@@ -140,9 +178,11 @@ const chartPatient = ref<Patient | null>(null)
 
 const requestFormError = ref('')
 const showRequestForm = ref(false)
-const showConfirmRequest = ref(false)
+const requestFormStep = ref<'form' | 'confirm'>('form')
 const requestPatientId = ref<number | null>(null)
 const requestPatientSearch = ref('')
+const requestDoctorId = ref<number | null>(null)
+const requestDoctorSearch = ref('')
 const isSavingRequest = ref(false)
 
 const TERMINAL_STATUSES = ['completed', 'rejected']
@@ -159,22 +199,46 @@ const filteredRequestPatients = computed(() => {
   return dischargeablePatients.value.filter((p) => p.full_name.toLowerCase().includes(q))
 })
 
+// On-duty doctors first, but any doctor can be chosen.
+const filteredRequestDoctors = computed(() => {
+  const q = requestDoctorSearch.value.trim().toLowerCase()
+  return doctors.value
+    .filter((d) => d.full_name.toLowerCase().includes(q) || (d.specialty ?? '').toLowerCase().includes(q))
+    .sort((a, b) => Number(b.duty_status === 'on_duty') - Number(a.duty_status === 'on_duty'))
+})
+
 const selectedRequestPatientName = computed(() => patients.value.find((p) => p.patient_id === requestPatientId.value)?.full_name ?? '')
+const selectedRequestDoctorName = computed(() => {
+  const doctor = doctors.value.find((d) => d.officer_id === requestDoctorId.value)
+  if (!doctor) return ''
+  return doctor.specialty ? `${doctor.full_name} (${doctor.specialty})` : doctor.full_name
+})
+
+function initials(name: string) {
+  return name.split(/\s+/).filter((w) => !/^dr\.?$/i.test(w)).slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+}
 
 function openNewRequestForm() {
   requestPatientId.value = dischargeablePatients.value[0]?.patient_id ?? null
   requestPatientSearch.value = ''
+  requestDoctorId.value = null
+  requestDoctorSearch.value = ''
   requestFormError.value = ''
+  requestFormStep.value = 'form'
   showRequestForm.value = true
 }
 
-function confirmNewRequest() {
-  if (requestPatientId.value === null) return
-  showConfirmRequest.value = true
+function handleRequestFormSubmit() {
+  if (requestFormStep.value === 'form') {
+    requestFormError.value = ''
+    requestFormStep.value = 'confirm'
+    return
+  }
+  submitNewRequest()
 }
 
 async function submitNewRequest() {
-  if (requestPatientId.value === null) return
+  if (requestPatientId.value === null || requestDoctorId.value === null) return
 
   isSavingRequest.value = true
   requestFormError.value = ''
@@ -182,6 +246,7 @@ async function submitNewRequest() {
   const { error } = await supabase.rpc('create_discharge_request', {
     p_patient_id: requestPatientId.value,
     p_requested_by: officerId.value,
+    p_assigned_doctor_id: requestDoctorId.value,
   })
 
   if (error) {
@@ -190,7 +255,6 @@ async function submitNewRequest() {
     return
   }
 
-  showConfirmRequest.value = false
   showRequestForm.value = false
   isSavingRequest.value = false
   await loadDashboardData()
@@ -204,6 +268,8 @@ const emptyPatientForm = {
   full_name: '',
   date_of_birth: '',
   age: '',
+  sex: '',
+  address: '',
   contact_number: '',
   emergency_contact: '',
   room_number: '',
@@ -214,10 +280,22 @@ const isSavingPatient = ref(false)
 const patientFormError = ref('')
 const patientFormStep = ref<'form' | 'preview'>('form')
 
+const patientFormTitle = computed(() => {
+  if (patientFormStep.value === 'form') return editingPatientId.value === null ? 'Add Patient' : 'Edit Patient'
+  return editingPatientId.value === null ? 'Confirm New Patient' : 'Confirm Patient Changes'
+})
+
+const patientFormSubtitle = computed(() => {
+  if (patientFormStep.value === 'preview') return 'Check the details below before saving.'
+  return editingPatientId.value === null ? undefined : 'Only sex, address, contact info and room number can be changed after registration.'
+})
+
 const patientPreviewFields = computed(() => [
   { label: 'Full name', value: patientForm.value.full_name },
   { label: 'Age', value: patientForm.value.age || '—' },
   { label: 'Date of birth', value: patientForm.value.date_of_birth || '—' },
+  { label: 'Sex', value: patientForm.value.sex || '—' },
+  { label: 'Address', value: patientForm.value.address || '—' },
   { label: 'Contact number', value: patientForm.value.contact_number || '—' },
   { label: 'Emergency contact', value: patientForm.value.emergency_contact || '—' },
   { label: 'Room number', value: patientForm.value.room_number || '—' },
@@ -238,6 +316,8 @@ function openEditPatientForm(patient: Patient) {
     full_name: patient.full_name,
     date_of_birth: patient.date_of_birth ?? '',
     age: patient.age === null ? '' : String(patient.age),
+    sex: patient.sex ?? '',
+    address: patient.address ?? '',
     contact_number: patient.contact_number ?? '',
     emergency_contact: patient.emergency_contact ?? '',
     room_number: patient.room_number === null ? '' : String(patient.room_number),
@@ -277,12 +357,16 @@ async function submitPatientForm() {
         p_room_number: patientForm.value.room_number === '' ? null : Number(patientForm.value.room_number),
         p_philhealth_no: patientForm.value.philhealth_no || null,
         p_attending_officer_id: officerId.value,
+        p_sex: patientForm.value.sex || null,
+        p_address: patientForm.value.address.trim() || null,
       })
     : await supabase.rpc('update_patient_info', {
         p_patient_id: editingPatientId.value,
         p_contact_number: patientForm.value.contact_number || null,
         p_emergency_contact: patientForm.value.emergency_contact || null,
         p_room_number: patientForm.value.room_number === '' ? null : Number(patientForm.value.room_number),
+        p_sex: patientForm.value.sex || null,
+        p_address: patientForm.value.address.trim() || null,
       })
 
   if (error) {
@@ -312,59 +396,71 @@ async function submitPatientForm() {
       </div>
 
       <template v-if="activeSection === 'overview'">
-        <!-- Patients & discharge summary -->
-        <div class="rounded-xl border border-border bg-card p-5">
-          <h2 class="text-base font-bold tracking-tight">Patients &amp; Discharge Summary</h2>
-          <p class="text-xs text-muted-foreground">Overview of your caseload</p>
-
-          <div class="mt-6 flex h-40 items-end gap-6 px-2 sm:gap-10">
-            <div
-              v-for="bar in summaryChartData"
-              :key="bar.label"
-              class="relative flex h-full flex-1 flex-col items-center justify-end"
-              tabindex="0"
-              role="img"
-              :aria-label="`${bar.label}: ${bar.count}`"
-              @mouseenter="hoveredSummary = bar.label"
-              @mouseleave="hoveredSummary = null"
-              @focus="hoveredSummary = bar.label"
-              @blur="hoveredSummary = null"
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="min-w-0 max-w-2xl">
+            <p class="text-2xl font-bold tracking-tight sm:text-3xl">{{ wardHeadline }}</p>
+            <p v-if="wardDetail" class="mt-1 text-sm text-muted-foreground">{{ wardDetail }}</p>
+          </div>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="rounded-md border border-input bg-card px-3 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+              :disabled="dischargeablePatients.length === 0"
+              @click="openNewRequestForm"
             >
-              <div
-                v-if="hoveredSummary === bar.label"
-                class="absolute -top-8 z-10 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-sm"
-              >
-                <span class="font-semibold tabular-nums text-popover-foreground">{{ bar.count }}</span>
-                <span class="ml-1 text-muted-foreground">{{ bar.label }}</span>
-              </div>
-              <span class="mb-1 text-xs font-medium tabular-nums text-foreground">{{ bar.count }}</span>
-              <div
-                class="w-full max-w-6 rounded-t-[4px] transition-opacity"
-                :class="hoveredSummary === bar.label ? 'opacity-80' : 'opacity-100'"
-                :style="{ height: `${bar.heightPct}%`, minHeight: '2px', backgroundColor: bar.color }"
-              />
-              <span class="mt-2 text-center text-xs text-muted-foreground">{{ bar.label }}</span>
-            </div>
+              Request Discharge
+            </button>
+            <button
+              type="button"
+              class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+              @click="openNewPatientForm"
+            >
+              Add Patient
+            </button>
           </div>
         </div>
 
-        <div class="grid gap-4 lg:grid-cols-2">
-          <!-- Recently Admitted Patients -->
-          <div class="rounded-xl border border-border bg-card p-5">
-            <h2 class="text-base font-bold tracking-tight">Recently Admitted Patients</h2>
-            <p class="text-xs text-muted-foreground">Your 5 newest patients</p>
+        <div class="grid items-start gap-4 xl:grid-cols-3">
+          <!-- Ward board: one cell per admitted patient, in room order -->
+          <section class="overflow-hidden rounded-xl border border-border bg-card xl:col-span-2" aria-labelledby="ward-board-title">
+            <div class="border-b border-border px-5 py-4">
+              <h2 id="ward-board-title" class="text-base font-bold tracking-tight">Ward board</h2>
+              <p class="text-xs text-muted-foreground">
+                {{ searchQuery ? `Showing results for "${searchQuery}"` : 'Select a patient to open their chart' }}
+              </p>
+            </div>
 
-            <ul class="mt-4 divide-y divide-border">
-              <li v-for="patient in recentPatients" :key="patient.patient_id" class="flex items-center justify-between gap-3 py-2.5 text-sm">
-                <div class="min-w-0">
-                  <p class="truncate font-medium">{{ patient.full_name }}</p>
-                  <p class="text-xs text-muted-foreground">Room {{ patient.room_number ?? '—' }}</p>
-                </div>
-                <span class="shrink-0 text-xs text-muted-foreground">{{ patient.admission_date }}</span>
+            <ul v-if="wardBoard.length > 0" class="-mb-px -mr-px grid sm:grid-cols-2">
+              <li v-for="{ patient, stage, day } in wardBoard" :key="patient.patient_id" class="border-b border-r border-border">
+                <button
+                  type="button"
+                  class="flex h-full w-full gap-4 p-4 text-left transition-colors hover:bg-muted/60 focus-visible:-outline-offset-2"
+                  @click="chartPatient = patient"
+                >
+                  <span class="w-14 shrink-0">
+                    <span class="block text-xs text-muted-foreground">Room</span>
+                    <span class="block text-3xl font-bold leading-tight tracking-tight tabular-nums">{{ patient.room_number ?? '—' }}</span>
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-semibold">{{ patient.full_name }}</span>
+                    <span class="block text-xs text-muted-foreground">Day {{ day }} of stay</span>
+                    <span class="mt-2.5 flex gap-1" aria-hidden="true">
+                      <span
+                        v-for="(step, i) in DISCHARGE_STEPS"
+                        :key="step"
+                        class="h-1.5 flex-1 rounded-full bg-muted"
+                        :style="i <= stage.step ? { backgroundColor: stage.color } : undefined"
+                      />
+                    </span>
+                    <span class="mt-1.5 block text-xs font-medium" :style="{ color: stage.color }">{{ stage.label }}</span>
+                  </span>
+                </button>
               </li>
-              <li v-if="recentPatients.length === 0" class="py-6 text-center text-sm text-muted-foreground">No patients yet.</li>
             </ul>
-          </div>
+            <div v-else-if="!isLoadingData" class="px-5 py-10 text-center text-sm text-muted-foreground">
+              {{ searchQuery ? 'No admitted patients match your search.' : 'Add a patient to start your ward board.' }}
+            </div>
+          </section>
 
           <!-- Recent Discharge Requests -->
           <div class="rounded-xl border border-border bg-card p-5">
@@ -375,7 +471,9 @@ async function submitPatientForm() {
               <li v-for="request in recentDischargeRequests" :key="request.request_id" class="flex items-center justify-between gap-3 py-2.5 text-sm">
                 <div class="min-w-0">
                   <p class="truncate font-medium">{{ request.patient_name }}</p>
-                  <p class="text-xs text-muted-foreground">{{ new Date(request.timestamp).toLocaleDateString() }}</p>
+                  <p class="truncate text-xs text-muted-foreground">
+                    {{ new Date(request.timestamp).toLocaleDateString() }}<template v-if="request.assigned_doctor_name">, sent to {{ request.assigned_doctor_name }}</template>
+                  </p>
                 </div>
                 <span
                   class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-xs font-medium capitalize"
@@ -427,7 +525,7 @@ async function submitPatientForm() {
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.admission_date }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.room_number ?? '—' }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ patient.philhealth_no ?? '—' }}</td>
-                <td class="py-2 pr-4 text-muted-foreground">{{ patient.discharge_date ?? '—' }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ patient.discharge_date ? new Date(patient.discharge_date).toLocaleDateString() : '—' }}</td>
                 <td class="py-2 text-right">
                   <div class="flex justify-end gap-3">
                     <button type="button" class="text-xs font-medium text-primary hover:underline" @click="chartPatient = patient">
@@ -454,7 +552,7 @@ async function submitPatientForm() {
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 class="text-base font-bold tracking-tight">Discharge Requests</h2>
-            <p class="text-xs text-muted-foreground">Patient records you've submitted for the doctor's approval</p>
+            <p class="text-xs text-muted-foreground">Patient records you've sent to a doctor for approval</p>
           </div>
           <button
             type="button"
@@ -471,6 +569,7 @@ async function submitPatientForm() {
             <thead>
               <tr class="border-b border-border text-left text-xs text-muted-foreground">
                 <th class="pb-2 pr-4 font-medium">Patient</th>
+                <th class="pb-2 pr-4 font-medium">Doctor</th>
                 <th class="pb-2 pr-4 font-medium">Billed</th>
                 <th class="pb-2 pr-4 font-medium">Submitted</th>
                 <th class="pb-2 font-medium">Status</th>
@@ -479,6 +578,7 @@ async function submitPatientForm() {
             <tbody class="divide-y divide-border">
               <tr v-for="request in dischargeRequests" :key="request.request_id">
                 <td class="py-2 pr-4 font-medium">{{ request.patient_name }}</td>
+                <td class="py-2 pr-4 text-muted-foreground">{{ request.assigned_doctor_name ?? '—' }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ request.status === 'completed' ? 'Yes' : 'No' }}</td>
                 <td class="py-2 pr-4 text-muted-foreground">{{ new Date(request.timestamp).toLocaleString() }}</td>
                 <td class="py-2">
@@ -492,7 +592,7 @@ async function submitPatientForm() {
                 </td>
               </tr>
               <tr v-if="!isLoadingData && dischargeRequests.length === 0">
-                <td colspan="4" class="py-6 text-center text-sm text-muted-foreground">No discharge requests yet.</td>
+                <td colspan="5" class="py-6 text-center text-sm text-muted-foreground">No discharge requests yet.</td>
               </tr>
             </tbody>
           </table>
@@ -510,234 +610,218 @@ async function submitPatientForm() {
     />
 
     <!-- Add / edit patient modal -->
-    <div v-if="showPatientForm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isSavingPatient && (showPatientForm = false)" />
-      <div class="relative flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
-        <h2 class="shrink-0 text-base font-semibold tracking-tight">
-          <template v-if="patientFormStep === 'form'">{{ editingPatientId === null ? 'Add Patient' : 'Edit Patient' }}</template>
-          <template v-else>{{ editingPatientId === null ? 'Confirm New Patient' : 'Confirm Patient Changes' }}</template>
-        </h2>
-        <p v-if="patientFormStep === 'preview'" class="mt-1 shrink-0 text-xs text-muted-foreground">Please check the details below before saving.</p>
-        <p v-else-if="editingPatientId !== null" class="mt-1 shrink-0 text-xs text-muted-foreground">
-          Only contact info and room number can be changed after registration.
-        </p>
+    <FormModal
+      v-if="showPatientForm"
+      :title="patientFormTitle"
+      :subtitle="patientFormSubtitle"
+      :icon="UserRoundPlus"
+      size="lg"
+      :busy="isSavingPatient"
+      @close="showPatientForm = false"
+    >
+      <form class="modal-form" @submit.prevent="handlePatientFormSubmit">
+        <div v-if="patientFormStep === 'form'" class="modal-body">
+          <section>
+            <h3 class="field-group-title">Patient details</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div class="field sm:col-span-2">
+                <label for="patient-name" class="field-label">Full name</label>
+                <input id="patient-name" v-model="patientForm.full_name" type="text" required :disabled="editingPatientId !== null" class="field-input">
+              </div>
+              <div class="field">
+                <label for="patient-age" class="field-label">Age</label>
+                <input id="patient-age" v-model="patientForm.age" type="number" min="0" :disabled="editingPatientId !== null" class="field-input">
+              </div>
+              <div class="field">
+                <label for="patient-dob" class="field-label">Date of birth</label>
+                <input id="patient-dob" v-model="patientForm.date_of_birth" type="date" :disabled="editingPatientId !== null" class="field-input">
+              </div>
+              <div class="field">
+                <label for="patient-sex" class="field-label">Sex</label>
+                <select id="patient-sex" v-model="patientForm.sex" class="field-input">
+                  <option value="">Not set</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="patient-philhealth" class="field-label">PhilHealth No.</label>
+                <input id="patient-philhealth" v-model="patientForm.philhealth_no" type="text" :disabled="editingPatientId !== null" class="field-input">
+              </div>
+              <div class="field">
+                <label for="patient-room" class="field-label">Room number</label>
+                <input id="patient-room" v-model="patientForm.room_number" type="number" min="0" class="field-input">
+              </div>
+            </div>
+          </section>
 
-        <form class="mt-4 flex min-h-0 flex-1 flex-col" @submit.prevent="handlePatientFormSubmit">
-        <div v-if="patientFormStep === 'form'" class="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-          <div class="space-y-1.5">
-            <label for="patient-name" class="text-sm font-medium">Full name</label>
-            <input
-              id="patient-name"
-              v-model="patientForm.full_name"
-              type="text"
-              required
-              :disabled="editingPatientId !== null"
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-            >
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div class="space-y-1.5">
-              <label for="patient-age" class="text-sm font-medium">Age</label>
-              <input
-                id="patient-age"
-                v-model="patientForm.age"
-                type="number"
-                min="0"
-                :disabled="editingPatientId !== null"
-                class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-              >
+          <section>
+            <h3 class="field-group-title">Contact</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div class="field sm:col-span-2">
+                <label for="patient-address" class="field-label">Address</label>
+                <input id="patient-address" v-model="patientForm.address" type="text" class="field-input">
+              </div>
+              <div class="field">
+                <label for="patient-contact" class="field-label">Contact number</label>
+                <input id="patient-contact" v-model="patientForm.contact_number" type="text" class="field-input">
+              </div>
+              <div class="field">
+                <label for="patient-emergency" class="field-label">Emergency contact</label>
+                <input id="patient-emergency" v-model="patientForm.emergency_contact" type="text" class="field-input">
+              </div>
             </div>
-            <div class="space-y-1.5">
-              <label for="patient-dob" class="text-sm font-medium">Date of birth</label>
-              <input
-                id="patient-dob"
-                v-model="patientForm.date_of_birth"
-                type="date"
-                :disabled="editingPatientId !== null"
-                class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-              >
-            </div>
-          </div>
-          <div class="space-y-1.5">
-            <label for="patient-contact" class="text-sm font-medium">Contact number</label>
-            <input
-              id="patient-contact"
-              v-model="patientForm.contact_number"
-              type="text"
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-          </div>
-          <div class="space-y-1.5">
-            <label for="patient-emergency" class="text-sm font-medium">Emergency contact</label>
-            <input
-              id="patient-emergency"
-              v-model="patientForm.emergency_contact"
-              type="text"
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-          </div>
-          <div class="space-y-1.5">
-            <label for="patient-room" class="text-sm font-medium">Room number</label>
-            <input
-              id="patient-room"
-              v-model="patientForm.room_number"
-              type="number"
-              min="0"
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-          </div>
-          <div class="space-y-1.5">
-            <label for="patient-philhealth" class="text-sm font-medium">PhilHealth No.</label>
-            <input
-              id="patient-philhealth"
-              v-model="patientForm.philhealth_no"
-              type="text"
-              :disabled="editingPatientId !== null"
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
-            >
-          </div>
+          </section>
         </div>
 
-        <dl v-else class="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-          <div v-for="field in patientPreviewFields" :key="field.label" class="flex justify-between gap-4 border-b border-border pb-2 text-sm">
-            <dt class="text-muted-foreground">{{ field.label }}</dt>
-            <dd class="text-right font-medium">{{ field.value }}</dd>
-          </div>
-        </dl>
+        <div v-else class="modal-body">
+          <dl class="space-y-3">
+            <div v-for="field in patientPreviewFields" :key="field.label" class="flex justify-between gap-4 border-b border-border pb-2 text-sm">
+              <dt class="text-muted-foreground">{{ field.label }}</dt>
+              <dd class="text-right font-medium">{{ field.value }}</dd>
+            </div>
+          </dl>
 
-          <div v-if="patientFormError" class="mt-4 flex shrink-0 items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">
+          <div v-if="patientFormError" class="form-error">
             <AlertTriangle class="h-4 w-4 shrink-0" />
             {{ patientFormError }}
           </div>
+        </div>
 
-          <div class="mt-4 flex shrink-0 gap-3">
-            <button
-              type="button"
-              :disabled="isSavingPatient"
-              class="flex-1 rounded-md border border-border py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              @click="patientFormStep === 'form' ? (showPatientForm = false) : (patientFormStep = 'form')"
-            >
-              {{ patientFormStep === 'form' ? 'Cancel' : 'Back' }}
-            </button>
-            <button
-              type="submit"
-              :disabled="isSavingPatient"
-              class="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <LoaderCircle v-if="isSavingPatient" class="h-4 w-4 animate-spin" />
-              <template v-if="patientFormStep === 'form'">Next</template>
-              <template v-else>{{ isSavingPatient ? 'Saving…' : 'Confirm & Save' }}</template>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            :disabled="isSavingPatient"
+            class="btn-secondary"
+            @click="patientFormStep === 'form' ? (showPatientForm = false) : (patientFormStep = 'form')"
+          >
+            {{ patientFormStep === 'form' ? 'Cancel' : 'Back' }}
+          </button>
+          <button type="submit" :disabled="isSavingPatient" class="btn-primary">
+            <LoaderCircle v-if="isSavingPatient" class="h-4 w-4 animate-spin" />
+            <template v-if="patientFormStep === 'form'">Next</template>
+            <template v-else>{{ isSavingPatient ? 'Saving…' : 'Confirm & Save' }}</template>
+          </button>
+        </div>
+      </form>
+    </FormModal>
 
     <!-- New discharge request modal -->
-    <div v-if="showRequestForm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isSavingRequest && (showRequestForm = false)" />
-      <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
-        <h2 class="text-base font-semibold tracking-tight">New Discharge Request</h2>
-        <p class="mt-1 text-xs text-muted-foreground">
-          Submits the patient's chart to the doctor. Once the doctor approves, billing computes the expenses.
-        </p>
+    <FormModal
+      v-if="showRequestForm"
+      :title="requestFormStep === 'form' ? 'New Discharge Request' : 'Submit discharge request?'"
+      :subtitle="requestFormStep === 'form'
+        ? 'The doctor you choose reviews the chart. Once approved, billing computes the expenses.'
+        : 'Check the details below before sending.'"
+      :icon="DoorOpen"
+      :size="requestFormStep === 'form' ? 'xl' : 'md'"
+      :busy="isSavingRequest"
+      @close="showRequestForm = false"
+    >
+      <form class="modal-form" @submit.prevent="handleRequestFormSubmit">
+        <div v-if="requestFormStep === 'form'" class="modal-body">
+          <div class="grid gap-5 sm:grid-cols-2">
+            <fieldset class="field min-w-0">
+              <legend class="field-label">Patient</legend>
+              <div class="relative">
+                <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  v-model="requestPatientSearch"
+                  type="search"
+                  aria-label="Search patients"
+                  placeholder="Search patients…"
+                  class="field-input pl-9"
+                >
+              </div>
+              <div class="pick-list">
+                <label v-for="patient in filteredRequestPatients" :key="patient.patient_id" class="pick-row">
+                  <input v-model="requestPatientId" type="radio" name="request-patient" :value="patient.patient_id" class="sr-only">
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-medium">{{ patient.full_name }}</span>
+                    <span class="block text-xs text-muted-foreground">Room {{ patient.room_number ?? '—' }}</span>
+                  </span>
+                  <Check v-if="requestPatientId === patient.patient_id" class="h-4 w-4 shrink-0" />
+                </label>
+                <p v-if="filteredRequestPatients.length === 0" class="px-2.5 py-2 text-sm text-muted-foreground">
+                  No matching patients.
+                </p>
+              </div>
+            </fieldset>
 
-        <form class="mt-4 space-y-4" @submit.prevent="confirmNewRequest">
-          <div class="space-y-1.5">
-            <label for="request-patient-search" class="text-sm font-medium">Patient</label>
-            <div class="relative">
-              <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                id="request-patient-search"
-                v-model="requestPatientSearch"
-                type="search"
-                placeholder="Search patients…"
-                class="w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              >
-            </div>
-            <div class="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border p-1.5">
-              <button
-                v-for="patient in filteredRequestPatients"
-                :key="patient.patient_id"
-                type="button"
-                class="w-full rounded-md px-2.5 py-1.5 text-left text-sm transition-colors"
-                :class="requestPatientId === patient.patient_id
-                  ? 'bg-primary/10 text-primary'
-                  : 'hover:bg-muted'"
-                @click="requestPatientId = patient.patient_id"
-              >
-                {{ patient.full_name }}
-              </button>
-              <p v-if="filteredRequestPatients.length === 0" class="px-2.5 py-1.5 text-sm text-muted-foreground">
-                No matching patients.
-              </p>
-            </div>
+            <fieldset class="field min-w-0">
+              <legend class="field-label">Send to doctor</legend>
+              <div class="relative">
+                <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  v-model="requestDoctorSearch"
+                  type="search"
+                  aria-label="Search doctors by name or field"
+                  placeholder="Search name or field, e.g. Oncology"
+                  class="field-input pl-9"
+                >
+              </div>
+              <div class="pick-list">
+                <label v-for="doctor in filteredRequestDoctors" :key="doctor.officer_id" class="pick-row">
+                  <input v-model="requestDoctorId" type="radio" name="request-doctor" :value="doctor.officer_id" class="sr-only">
+                  <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-secondary text-xs font-semibold text-secondary-foreground">
+                    {{ initials(doctor.full_name) }}
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-medium">{{ doctor.full_name }}</span>
+                    <span class="block truncate text-xs text-muted-foreground">{{ doctor.specialty ?? 'No field set' }}</span>
+                    <span class="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span class="h-1.5 w-1.5 rounded-full" :class="doctor.duty_status === 'on_duty' ? 'bg-success' : 'bg-neutral'" />
+                      {{ doctor.duty_status === 'on_duty' ? 'On duty' : 'Off duty' }}
+                    </span>
+                  </span>
+                  <Check v-if="requestDoctorId === doctor.officer_id" class="h-4 w-4 shrink-0" />
+                </label>
+                <p v-if="filteredRequestDoctors.length === 0" class="px-2.5 py-2 text-sm text-muted-foreground">
+                  {{ doctors.length === 0 ? 'No doctors registered. Ask an admin to add one.' : 'No matching doctors.' }}
+                </p>
+              </div>
+            </fieldset>
           </div>
+        </div>
 
-          <div v-if="requestFormError" class="flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">
+        <div v-else class="modal-body">
+          <dl class="space-y-3">
+            <div class="flex justify-between gap-4 border-b border-border pb-2 text-sm">
+              <dt class="text-muted-foreground">Patient</dt>
+              <dd class="text-right font-medium">{{ selectedRequestPatientName }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 border-b border-border pb-2 text-sm">
+              <dt class="text-muted-foreground">Doctor</dt>
+              <dd class="text-right font-medium">{{ selectedRequestDoctorName }}</dd>
+            </div>
+          </dl>
+
+          <div v-if="requestFormError" class="form-error">
             <AlertTriangle class="h-4 w-4 shrink-0" />
             {{ requestFormError }}
           </div>
-
-          <div class="flex gap-3 pt-2">
-            <button
-              type="button"
-              :disabled="isSavingRequest"
-              class="flex-1 rounded-md border border-border py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              @click="showRequestForm = false"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              :disabled="isSavingRequest || requestPatientId === null"
-              class="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <LoaderCircle v-if="isSavingRequest" class="h-4 w-4 animate-spin" />
-              {{ isSavingRequest ? 'Submitting…' : 'Submit Request' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Confirm discharge request modal -->
-    <div v-if="showConfirmRequest" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isSavingRequest && (showConfirmRequest = false)" />
-      <div class="relative w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
-        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-          <DoorOpen class="h-5 w-5 text-primary" />
-        </span>
-        <h2 class="mt-4 text-base font-semibold tracking-tight">Submit discharge request?</h2>
-        <p class="mt-1.5 text-sm text-muted-foreground">
-          This will request discharge for <span class="font-medium text-foreground">{{ selectedRequestPatientName }}</span>.
-        </p>
-
-        <div v-if="requestFormError" class="mt-4 flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">
-          <AlertTriangle class="h-4 w-4 shrink-0" />
-          {{ requestFormError }}
         </div>
 
-        <div class="mt-6 flex gap-3">
+        <div class="modal-footer">
           <button
             type="button"
             :disabled="isSavingRequest"
-            class="flex-1 rounded-md border border-border py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-            @click="showConfirmRequest = false"
+            class="btn-secondary"
+            @click="requestFormStep === 'form' ? (showRequestForm = false) : (requestFormStep = 'form')"
           >
-            No
+            {{ requestFormStep === 'form' ? 'Cancel' : 'Back' }}
           </button>
           <button
-            type="button"
-            :disabled="isSavingRequest"
-            class="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-            @click="submitNewRequest"
+            type="submit"
+            :disabled="isSavingRequest || requestPatientId === null || requestDoctorId === null"
+            class="btn-primary"
           >
             <LoaderCircle v-if="isSavingRequest" class="h-4 w-4 animate-spin" />
-            {{ isSavingRequest ? 'Submitting…' : 'Yes, submit' }}
+            <template v-if="requestFormStep === 'form'">Next</template>
+            <template v-else>{{ isSavingRequest ? 'Submitting…' : 'Submit Request' }}</template>
           </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </FormModal>
   </div>
 </template>

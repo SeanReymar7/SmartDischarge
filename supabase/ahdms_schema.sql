@@ -6,7 +6,7 @@
 
 -- Required for password hashing. Supabase installs extensions into the
 -- `extensions` schema by default, not `public` -- the SECURITY DEFINER
--- functions in ahdms_auth_functions.sql set search_path accordingly.
+-- functions in ahdms_auth.sql set search_path accordingly.
 create extension if not exists pgcrypto with schema extensions;
 
 -- ============================================
@@ -14,6 +14,7 @@ create extension if not exists pgcrypto with schema extensions;
 -- WARNING: this deletes existing data in these tables.
 -- ============================================
 drop table if exists billing cascade;
+drop table if exists medical_abstracts cascade;
 drop table if exists chart_entries cascade;
 drop table if exists discharge_requests cascade;
 drop table if exists patients cascade;
@@ -28,7 +29,9 @@ create table officers (
     officer_id      bigint generated always as identity primary key,
     full_name       text not null,
     role            text not null check (role in ('nurse', 'doctor', 'billing', 'admin')),
-    duty_status     text not null default 'off_duty' check (duty_status in ('on_duty', 'off_duty')),
+    specialty       text, -- doctors only, e.g. 'Oncology'
+    license_number  text, -- doctors only, printed on the medical abstract
+    duty_status    text not null default 'off_duty' check (duty_status in ('on_duty', 'off_duty')),
     created_at      timestamptz not null default now()
 );
 
@@ -52,6 +55,8 @@ create table patients (
     full_name               text not null,
     date_of_birth           date,
     age                     smallint,
+    sex                     text check (sex in ('Male', 'Female')),
+    address                 text,
     contact_number          text,
     emergency_contact       text,
     admission_date          date not null default current_date,
@@ -65,12 +70,14 @@ create table patients (
 -- ============================================
 -- 4. DISCHARGE_REQUESTS
 -- pending -> approved (doctor) -> completed (billing cleared), or rejected.
+-- assigned_doctor_id is the doctor the nurse chose to send the request to.
 -- approved_by records the doctor who approved or rejected.
 -- ============================================
 create table discharge_requests (
     request_id      bigint generated always as identity primary key,
     patient_id      bigint not null references patients(patient_id) on delete cascade,
     requested_by    bigint not null references officers(officer_id),
+    assigned_doctor_id bigint references officers(officer_id),
     approved_by     bigint references officers(officer_id),
     status          text not null default 'pending'
                      check (status in ('pending', 'approved', 'completed', 'rejected')),
@@ -82,6 +89,7 @@ create table discharge_requests (
 -- The patient chart. Nurses record vital signs, nursing notes,
 -- medication and other records; doctors add their advice/orders.
 -- `details` holds the type's fields (see app/components/PatientChart.vue).
+-- `edit_history` keeps each earlier version of `details`, oldest first.
 -- ============================================
 create table chart_entries (
     entry_id        bigint generated always as identity primary key,
@@ -90,11 +98,30 @@ create table chart_entries (
     entry_type      text not null
                      check (entry_type in ('vital_signs', 'nursing_note', 'medication', 'other', 'doctor_order')),
     details         jsonb not null,
-    created_at      timestamptz not null default now()
+    created_at      timestamptz not null default now(),
+    updated_by      bigint references officers(officer_id),
+    updated_at      timestamptz,
+    edit_history    jsonb not null default '[]'::jsonb
 );
 
 -- ============================================
--- 6. BILLING
+-- 6. MEDICAL_ABSTRACTS
+-- The doctor's clinical summary. `sections` holds the seven sections (see
+-- app/components/MedicalAbstracts.vue). `edit_history` keeps each earlier
+-- version, oldest first.
+-- ============================================
+create table medical_abstracts (
+    abstract_id     bigint generated always as identity primary key,
+    patient_id      bigint not null references patients(patient_id) on delete cascade,
+    doctor_id       bigint not null references officers(officer_id),
+    sections        jsonb not null,
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz,
+    edit_history    jsonb not null default '[]'::jsonb
+);
+
+-- ============================================
+-- 7. BILLING
 -- One cleared bill per discharge request, written by clear_billing().
 -- ============================================
 create table billing (
@@ -115,21 +142,24 @@ create index idx_credentials_officer_id on credentials(officer_id);
 create index idx_patients_attending_officer_id on patients(attending_officer_id);
 create index idx_discharge_requests_patient_id on discharge_requests(patient_id);
 create index idx_discharge_requests_requested_by on discharge_requests(requested_by);
+create index idx_discharge_requests_assigned_doctor_id on discharge_requests(assigned_doctor_id);
 create index idx_discharge_requests_approved_by on discharge_requests(approved_by);
 create index idx_discharge_requests_status on discharge_requests(status);
 create index idx_chart_entries_patient_id on chart_entries(patient_id);
+create index idx_medical_abstracts_patient_id on medical_abstracts(patient_id);
 create index idx_billing_patient_id on billing(patient_id);
 create index idx_officers_role_duty on officers(role, duty_status);
 
 -- ============================================
 -- RLS: enabled with no policies on purpose. There is no Supabase Auth
--- session in this app (see supabase/ahdms_auth_functions.sql) — the only
+-- session in this app (see supabase/ahdms_auth.sql) — the only
 -- way in for the anon role is through the SECURITY DEFINER RPC functions
--- in ahdms_auth_functions.sql and ahdms_core_functions.sql.
+-- in ahdms_auth.sql and ahdms_functions.sql.
 -- ============================================
 alter table officers enable row level security;
 alter table credentials enable row level security;
 alter table patients enable row level security;
 alter table discharge_requests enable row level security;
 alter table chart_entries enable row level security;
+alter table medical_abstracts enable row level security;
 alter table billing enable row level security;

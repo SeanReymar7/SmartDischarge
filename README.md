@@ -40,10 +40,10 @@ All business rules run **inside Postgres** as functions (RPCs) in `supabase/`. T
 
 | File | Contents |
 |---|---|
-| `supabase/ahdms_schema.sql` | Tables: `officers`, `credentials`, `patients`, `chart_entries`, `discharge_requests`, `billing` |
-| `supabase/ahdms_auth_functions.sql` | `login_officer`, `register_officer` (bcrypt password hashing via pgcrypto) |
-| `supabase/ahdms_core_functions.sql` | Workflow: patient chart, discharge requests, approve/reject, billing, listings |
-| `supabase/ahdms_cleanup_legacy.sql` | One-time cleanup of functions from older schema versions (incl. the removed task workflow) |
+| `supabase/ahdms_schema.sql` | Tables: `officers`, `credentials`, `patients`, `chart_entries`, `medical_abstracts`, `discharge_requests`, `billing` |
+| `supabase/ahdms_auth.sql` | `login_officer`, `register_officer` (bcrypt password hashing via pgcrypto) |
+| `supabase/ahdms_functions.sql` | Workflow: patient chart, discharge requests, approve/reject, billing, listings |
+| `supabase/ahdms_cleanup.sql` | Upgrades an existing database: adds new columns and removes legacy functions (incl. the removed task workflow) |
 
 ---
 
@@ -57,12 +57,19 @@ npm install
 
 ### 2. Set up the database (Supabase SQL Editor)
 
-Open **Supabase Dashboard → SQL Editor**, paste each file, and click **Run**, in this order:
+Open **Supabase Dashboard → SQL Editor**, paste each file, and click **Run**, in the order below.
 
-1. `supabase/ahdms_cleanup_legacy.sql`: only if the project has the old functions
-2. `supabase/ahdms_schema.sql`: ⚠️ **drops and recreates all tables, so existing data is deleted**
-3. `supabase/ahdms_auth_functions.sql`
-4. `supabase/ahdms_core_functions.sql`
+**New database:**
+
+1. `supabase/ahdms_schema.sql`: ⚠️ **drops and recreates all tables, so existing data is deleted**
+2. `supabase/ahdms_auth.sql`
+3. `supabase/ahdms_functions.sql`
+
+**Already have data?** Do not run the schema file. This order keeps your rows:
+
+1. `supabase/ahdms_cleanup.sql`
+2. `supabase/ahdms_auth.sql`
+3. `supabase/ahdms_functions.sql`
 
 Then create the first admin. This works only while the `officers` table is empty:
 

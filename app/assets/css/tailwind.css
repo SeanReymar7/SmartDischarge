@@ -143,6 +143,93 @@
   }
 }
 
+/* Forms: shared by every FormModal so fields, lists and buttons stay identical */
+@layer components {
+  .modal-form {
+    @apply flex min-h-0 flex-1 flex-col;
+  }
+  .modal-body {
+    @apply min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5;
+  }
+  .modal-footer {
+    @apply flex shrink-0 gap-3 border-t border-border bg-muted/50 px-6 py-4;
+  }
+
+  .field {
+    @apply space-y-1.5;
+  }
+  .field-label {
+    @apply block text-sm font-medium;
+  }
+  .field-group-title {
+    @apply mb-3 text-sm font-semibold text-primary;
+  }
+  .field-input {
+    @apply w-full rounded-md border border-input bg-muted/50 px-3 py-2.5 text-sm transition-colors outline-none placeholder:text-muted-foreground hover:border-primary/50 focus-visible:border-primary focus-visible:bg-card focus-visible:ring-3 focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  /* A radio list: the input is hidden, the whole row is the target */
+  .pick-list {
+    @apply max-h-56 space-y-1 overflow-y-auto rounded-md border border-border p-1.5;
+  }
+  .pick-row {
+    @apply flex cursor-pointer items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors hover:bg-muted;
+  }
+  .pick-row:has(input:checked) {
+    @apply bg-primary/10 text-primary hover:bg-primary/10;
+  }
+  .pick-row:has(input:focus-visible) {
+    @apply outline-2 outline-offset-1 outline-ring;
+  }
+
+  .btn-primary {
+    @apply flex flex-1 items-center justify-center gap-2 rounded-md bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-secondary {
+    @apply flex-1 rounded-md border border-input bg-card py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .form-error {
+    @apply flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger;
+  }
+
+  /* PrintPreview: a sheet of paper, always white, on a dimmed page */
+  .print-preview {
+    @apply fixed inset-0 z-60 overflow-y-auto bg-sidebar/80 p-4;
+  }
+  .print-toolbar {
+    @apply mx-auto mb-4 flex max-w-[210mm] justify-end gap-3;
+  }
+  .print-sheet {
+    @apply mx-auto min-h-[297mm] max-w-[210mm] bg-white p-[15mm] text-black shadow-2xl;
+  }
+}
+
+/* Print only the open sheet, not the dashboard behind it */
+@media print {
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+  body > :not(.print-preview) {
+    display: none !important;
+  }
+  .print-toolbar {
+    display: none;
+  }
+  .print-preview {
+    position: static;
+    overflow: visible;
+    background: none;
+    padding: 0;
+  }
+  .print-sheet {
+    min-height: 0;
+    max-width: none;
+    padding: 0;
+    box-shadow: none;
+  }
+}
+
 /* Section switch inside a dashboard, and route changes (nuxt.config pageTransition) */
 .section-enter-active,
 .section-leave-active,

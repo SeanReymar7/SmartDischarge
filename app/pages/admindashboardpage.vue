@@ -52,6 +52,7 @@ interface Officer {
   officer_id: number
   full_name: string
   role: string
+  specialty: string | null
   duty_status: string
 }
 
@@ -90,7 +91,28 @@ async function toggleDutyStatus(officer: Officer) {
 }
 
 const roleOptions = ['nurse', 'doctor', 'billing', 'admin']
-const emptyStaffForm = { full_name: '', email: '', password: '', role: 'nurse' }
+const specialtyOptions = [
+  'General Medicine',
+  'Anesthesiology',
+  'Cardiology',
+  'Dermatology',
+  'Emergency Medicine',
+  'Family Medicine',
+  'Gastroenterology',
+  'General Surgery',
+  'Nephrology',
+  'Neurology',
+  'Obstetrics and Gynecology',
+  'Oncology',
+  'Ophthalmology',
+  'Orthopedics',
+  'Otorhinolaryngology (ENT)',
+  'Pediatrics',
+  'Psychiatry',
+  'Pulmonology',
+  'Urology',
+]
+const emptyStaffForm = { full_name: '', email: '', password: '', role: 'nurse', specialty: '', license_number: '' }
 const newStaffForm = ref({ ...emptyStaffForm })
 const showRegisterStaffForm = ref(false)
 const isRegisteringStaff = ref(false)
@@ -112,6 +134,8 @@ async function registerStaff() {
     p_full_name: newStaffForm.value.full_name,
     p_role: newStaffForm.value.role,
     p_admin_id: officerId.value,
+    p_specialty: newStaffForm.value.role === 'doctor' ? newStaffForm.value.specialty : null,
+    p_license_number: newStaffForm.value.role === 'doctor' ? newStaffForm.value.license_number : null,
   })
 
   if (error) {
@@ -174,6 +198,8 @@ interface Patient {
   full_name: string
   date_of_birth: string | null
   age: number | null
+  sex: string | null
+  address: string | null
   contact_number: string | null
   emergency_contact: string | null
   admission_date: string
@@ -216,6 +242,7 @@ const filteredPatients = computed(() => {
 })
 
 const viewingPatient = ref<Patient | null>(null)
+const showAbstracts = ref(false)
 
 const viewingPatientFields = computed(() => {
   const p = viewingPatient.value
@@ -224,6 +251,8 @@ const viewingPatientFields = computed(() => {
     { label: 'Full name', value: p.full_name },
     { label: 'Age', value: p.age ?? '—' },
     { label: 'Date of birth', value: p.date_of_birth ?? '—' },
+    { label: 'Sex', value: p.sex ?? '—' },
+    { label: 'Address', value: p.address ?? '—' },
     { label: 'Contact number', value: p.contact_number ?? '—' },
     { label: 'Emergency contact', value: p.emergency_contact ?? '—' },
     { label: 'Admission date', value: p.admission_date },
@@ -239,10 +268,10 @@ const onDutyCount = computed(() => officers.value.filter((o) => o.duty_status ==
 const patientsInQueue = computed(() => patients.value.filter((p) => !p.discharge_date).length)
 
 const statTiles = computed(() => [
-  { icon: BedSingle, tone: 'bg-info/10 text-info', label: 'Patients in Queue', value: String(patientsInQueue.value) },
-  { icon: UserRoundCheck, tone: 'bg-primary/10 text-primary', label: 'Staff on Duty', value: `${onDutyCount.value} of ${officers.value.length}` },
-  { icon: DoorOpen, tone: 'bg-success/10 text-success', label: 'Completed Discharges', value: String(dischargeRequests.value.filter((r) => r.status === 'completed').length) },
-  { icon: ReceiptText, tone: 'bg-warning/10 text-warning', label: 'Awaiting Billing', value: String(dischargeRequests.value.filter((r) => r.status === 'approved').length) },
+  { icon: BedSingle, label: 'Patients in Queue', value: String(patientsInQueue.value) },
+  { icon: UserRoundCheck, label: 'Staff on Duty', value: `${onDutyCount.value} of ${officers.value.length}` },
+  { icon: DoorOpen, label: 'Completed Discharges', value: String(dischargeRequests.value.filter((r) => r.status === 'completed').length) },
+  { icon: ReceiptText, label: 'Awaiting Billing', value: String(dischargeRequests.value.filter((r) => r.status === 'approved').length) },
 ])
 
 const dischargeStatusIcon: Record<string, typeof Clock> = {
@@ -327,11 +356,11 @@ const hoveredDay = ref<number | null>(null)
           :key="tile.label"
           class="rounded-xl border border-border bg-card p-5"
         >
-          <span class="flex h-9 w-9 items-center justify-center rounded-md" :class="tile.tone">
-            <component :is="tile.icon" class="h-4.5 w-4.5" />
-          </span>
-          <p class="mt-4 text-2xl font-semibold tracking-tight tabular-nums">{{ tile.value }}</p>
-          <p class="mt-1 text-sm text-muted-foreground">{{ tile.label }}</p>
+          <p class="flex items-center gap-2 text-sm text-muted-foreground">
+            <component :is="tile.icon" class="h-4 w-4 shrink-0" :stroke-width="1.75" aria-hidden="true" />
+            {{ tile.label }}
+          </p>
+          <p class="mt-3 text-3xl font-semibold tracking-tight tabular-nums">{{ tile.value }}</p>
         </div>
       </div>
 
@@ -558,6 +587,7 @@ const hoveredDay = ref<number | null>(null)
                 <tr class="border-b border-border text-left text-xs text-muted-foreground">
                   <th class="pb-2 pr-4 font-medium">Name</th>
                   <th class="pb-2 pr-4 font-medium">Role</th>
+                  <th class="pb-2 pr-4 font-medium">Field</th>
                   <th class="pb-2 font-medium">Duty status</th>
                 </tr>
               </thead>
@@ -565,6 +595,7 @@ const hoveredDay = ref<number | null>(null)
                 <tr v-for="officer in officers" :key="officer.officer_id">
                   <td class="py-2 pr-4 font-medium">{{ officer.full_name }}</td>
                   <td class="py-2 pr-4 text-muted-foreground capitalize">{{ officer.role }}</td>
+                  <td class="py-2 pr-4 text-muted-foreground">{{ officer.specialty ?? '—' }}</td>
                   <td class="py-2">
                     <button
                       type="button"
@@ -578,7 +609,7 @@ const hoveredDay = ref<number | null>(null)
                   </td>
                 </tr>
                 <tr v-if="!isLoadingStaff && officers.length === 0">
-                  <td colspan="3" class="py-6 text-center text-sm text-muted-foreground">No staff found.</td>
+                  <td colspan="4" class="py-6 text-center text-sm text-muted-foreground">No staff found.</td>
                 </tr>
               </tbody>
             </table>
@@ -594,102 +625,105 @@ const hoveredDay = ref<number | null>(null)
     </DashboardShell>
 
     <!-- Patient view modal -->
-    <div v-if="viewingPatient" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="viewingPatient = null" />
-      <div class="relative flex max-h-[90vh] w-full max-w-md flex-col rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
-        <h2 class="shrink-0 text-base font-semibold tracking-tight">Patient Information</h2>
-
-        <dl class="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+    <FormModal
+      v-if="viewingPatient"
+      title="Patient Information"
+      :icon="BedSingle"
+      @close="viewingPatient = null"
+    >
+      <div class="modal-body">
+        <dl class="space-y-3">
           <div v-for="field in viewingPatientFields" :key="field.label" class="flex justify-between gap-4 border-b border-border pb-2 text-sm">
             <dt class="text-muted-foreground">{{ field.label }}</dt>
             <dd class="text-right font-medium">{{ field.value }}</dd>
           </div>
         </dl>
-
-        <button
-          type="button"
-          class="mt-4 shrink-0 rounded-md border border-border py-2 text-sm font-medium transition-colors hover:bg-muted"
-          @click="viewingPatient = null"
-        >
-          Close
-        </button>
       </div>
-    </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" @click="viewingPatient = null">Close</button>
+        <button type="button" class="btn-secondary" @click="showAbstracts = true">Medical Abstract</button>
+      </div>
+    </FormModal>
+
+    <MedicalAbstracts
+      v-if="viewingPatient && showAbstracts"
+      :patient-id="viewingPatient.patient_id"
+      :patient-name="viewingPatient.full_name"
+      :officer-id="officerId"
+      :can-write="false"
+      @close="showAbstracts = false"
+    />
 
     <!-- Register staff modal -->
-    <div v-if="showRegisterStaffForm" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/45 animate-in fade-in-0" @click="!isRegisteringStaff && (showRegisterStaffForm = false)" />
-      <div class="relative w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
-        <h2 class="text-base font-semibold tracking-tight">Register New Staff</h2>
-        <p class="mt-1 text-xs text-muted-foreground">Creates a login and an officer profile in one go</p>
+    <FormModal
+      v-if="showRegisterStaffForm"
+      title="Register New Staff"
+      subtitle="Creates a login and an officer profile in one go"
+      :icon="IdCard"
+      size="lg"
+      :busy="isRegisteringStaff"
+      @close="showRegisterStaffForm = false"
+    >
+      <form class="modal-form" @submit.prevent="registerStaff">
+        <div class="modal-body">
+          <fieldset class="field">
+            <legend class="field-label">Role</legend>
+            <div class="grid grid-cols-2 gap-1 rounded-md bg-muted p-1 sm:grid-cols-4">
+              <label
+                v-for="option in roleOptions"
+                :key="option"
+                class="cursor-pointer rounded-sm py-2 text-center text-sm font-medium capitalize text-muted-foreground transition-colors hover:text-foreground has-checked:bg-card has-checked:text-primary has-checked:shadow-sm has-focus-visible:outline-2 has-focus-visible:outline-ring"
+              >
+                <input v-model="newStaffForm.role" type="radio" name="staff-role" :value="option" class="sr-only">
+                {{ option }}
+              </label>
+            </div>
+          </fieldset>
 
-        <form class="mt-4 grid gap-4 sm:grid-cols-2" @submit.prevent="registerStaff">
-          <div class="space-y-1.5">
-            <label for="staff-full-name" class="text-sm font-medium">Full name</label>
-            <input
-              id="staff-full-name"
-              v-model="newStaffForm.full_name"
-              type="text"
-              required
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-          </div>
-          <div class="space-y-1.5">
-            <label for="staff-role" class="text-sm font-medium">Role</label>
-            <select
-              id="staff-role"
-              v-model="newStaffForm.role"
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option v-for="option in roleOptions" :key="option" :value="option" class="capitalize">{{ option }}</option>
-            </select>
-          </div>
-          <div class="space-y-1.5 sm:col-span-2">
-            <label for="staff-email" class="text-sm font-medium">Email</label>
-            <input
-              id="staff-email"
-              v-model="newStaffForm.email"
-              type="email"
-              required
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-          </div>
-          <div class="space-y-1.5 sm:col-span-2">
-            <label for="staff-password" class="text-sm font-medium">Password</label>
-            <input
-              id="staff-password"
-              v-model="newStaffForm.password"
-              type="password"
-              required
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="field sm:col-span-2">
+              <label for="staff-full-name" class="field-label">Full name</label>
+              <input id="staff-full-name" v-model="newStaffForm.full_name" type="text" required class="field-input">
+            </div>
+            <div v-if="newStaffForm.role === 'doctor'" class="field sm:col-span-2">
+              <label for="staff-specialty" class="field-label">Field</label>
+              <select id="staff-specialty" v-model="newStaffForm.specialty" required class="field-input">
+                <option value="" disabled>Choose a field</option>
+                <option v-for="option in specialtyOptions" :key="option" :value="option">{{ option }}</option>
+              </select>
+              <p class="text-xs text-muted-foreground">Nurses search by this when sending a discharge request.</p>
+            </div>
+            <div v-if="newStaffForm.role === 'doctor'" class="field sm:col-span-2">
+              <label for="staff-license" class="field-label">License number</label>
+              <input id="staff-license" v-model="newStaffForm.license_number" type="text" required class="field-input">
+              <p class="text-xs text-muted-foreground">Printed on the doctor's medical abstracts.</p>
+            </div>
+            <div class="field">
+              <label for="staff-email" class="field-label">Email</label>
+              <input id="staff-email" v-model="newStaffForm.email" type="email" required class="field-input">
+            </div>
+            <div class="field">
+              <label for="staff-password" class="field-label">Password</label>
+              <input id="staff-password" v-model="newStaffForm.password" type="password" required class="field-input">
+            </div>
           </div>
 
-          <div v-if="registerStaffError" class="flex items-center gap-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger sm:col-span-2">
+          <div v-if="registerStaffError" class="form-error">
             <AlertTriangle class="h-4 w-4 shrink-0" />
             {{ registerStaffError }}
           </div>
+        </div>
 
-          <div class="flex gap-3 sm:col-span-2">
-            <button
-              type="button"
-              :disabled="isRegisteringStaff"
-              class="flex-1 rounded-md border border-border py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-              @click="showRegisterStaffForm = false"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              :disabled="isRegisteringStaff"
-              class="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <LoaderCircle v-if="isRegisteringStaff" class="h-4 w-4 animate-spin" />
-              {{ isRegisteringStaff ? 'Registering…' : 'Register Staff' }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div class="modal-footer">
+          <button type="button" :disabled="isRegisteringStaff" class="btn-secondary" @click="showRegisterStaffForm = false">
+            Cancel
+          </button>
+          <button type="submit" :disabled="isRegisteringStaff" class="btn-primary">
+            <LoaderCircle v-if="isRegisteringStaff" class="h-4 w-4 animate-spin" />
+            {{ isRegisteringStaff ? 'Registering…' : 'Register Staff' }}
+          </button>
+        </div>
+      </form>
+    </FormModal>
   </div>
 </template>
