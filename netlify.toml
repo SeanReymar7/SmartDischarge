@@ -1,0 +1,6 @@
+[build.environment]
+  # @nuxtjs/supabase ships SUPABASE_URL and SUPABASE_KEY (the anon/publishable
+  # key) to the browser by design, so they appear in the build output. Both are
+  # public; data is protected by Postgres RLS. Never put a service_role key in
+  # SUPABASE_KEY, and never add a secret key to this list.
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_KEY"
